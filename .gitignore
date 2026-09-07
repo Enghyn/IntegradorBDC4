@@ -22,7 +22,7 @@ node_modules/
 .DS_Store
 
 # Directorios de specs/steering (no subir si contienen datos sensibles internos)
-.kiro/
+# .kiro/
 
 # Seeds SOLO sintéticos (verifica no contener datos reales)
 # Si hay seeds con datos productivos, ignóralos explícitamente aquí:
