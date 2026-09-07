@@ -1,0 +1,33 @@
+# Archivos de entorno y secretos
+.env
+.env.*
+*.env
+
+# Backups, dumps y archivos de base de datos pesados
+db/backups/
+*.dump
+*.bak
+*.db
+*.sqlite
+
+# Logs y archivos temporales
+*.log
+*.tmp
+
+# Archivos de caché y sistema
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+.DS_Store
+
+# Directorios de specs/steering (no subir si contienen datos sensibles internos)
+.kiro/
+
+# Seeds SOLO sintéticos (verifica no contener datos reales)
+# Si hay seeds con datos productivos, ignóralos explícitamente aquí:
+# db/seeds/seed_real.sql
+
+# Otros archivos temporales o grandes inadvertidos
+*.zip
+*.tar.gz
