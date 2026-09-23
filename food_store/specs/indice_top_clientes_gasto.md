@@ -210,3 +210,11 @@ CREATE INDEX idx_detalle_pedido_id_pedido
 - Optimización de la consulta 3.2 (productos sobre el promedio de categoría): objeto de
   una spec separada.
 - Ajuste de parámetros de configuración de PostgreSQL (`work_mem`, `enable_seqscan`, etc.).
+
+## 10. Propuestas alternativas descartadas
+
+1. **Índice B-tree completo sobre `cliente(activo)`:**
+   - *Descarte:* La columna `activo` posee baja cardinalidad (tipo `BOOLEAN` con ~95% en `TRUE`). Un índice tradicional completo sería ignorado por el optimizador. Se opta exclusivamente por el **índice parcial** (`WHERE activo = TRUE`).<br>
+
+2. **Índice compuesto sobre `detalle_pedido(id_pedido, id_producto)`:**
+   - *Descarte:* La tabla ya cuenta con la clave primaria compuesta `pk_detalle_pedido (id_pedido, id_producto)`. Crear un índice adicional idéntico representaría un caso directo de **sobreindexación y redundancia**.
