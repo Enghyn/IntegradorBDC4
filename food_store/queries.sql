@@ -10,7 +10,7 @@
 --   3. EXPLAIN ANALYZE baseline: mediciones de rendimiento sobre tp_food_store
 --      (10 categorías, 20k clientes, 50k productos, 200k pedidos, ~700k detalles)
 --
--- Base de datos: tp_food_store (PostgreSQL)
+-- Base de datos: food_store (PostgreSQL)
 -- Nota: este archivo NO modifica el modelo de datos. Los CREATE INDEX / CREATE VIEW
 --       de la entrega se definen por separado (objetos de la semana).
 -- ============================================================================
@@ -243,7 +243,7 @@ EXCEPT
 -- ============================================================================
 -- COMPETENCIA — Consulta Base (sin optimización)
 -- Listado de productos por categoría con filtro de precio y orden
--- Base: tp_food_store (50k productos, 10 categorías activas)
+-- Base: food_store (50k productos, 10 categorías activas)
 -- Rango de precio: BETWEEN 1500 AND 2000 (~10% de los productos)
 -- ============================================================================
 
