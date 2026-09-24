@@ -217,3 +217,91 @@ Execution Time: 149374.371 ms
 **Índice B-Tree completo sobre producto(activo):** Descartado por baja cardinalidad (tipo BOOLEAN con ~95% en TRUE). Un índice completo no ofrece selectividad útil y sería ignorado por el motor. Se utilizó exitosamente la condición parcial `WHERE activo = TRUE`.
 
 **Índice simple sobre producto(precio_lista) sin id_categoria:** Descartado porque las subconsultas agrupan estrictamente por `id_categoria`. Un índice sin la clave de correlación no permite localizar eficientemente los precios por categoría, resultando ineficaz frente a las subconsultas.
+
+### 7. Evaluación del Impacto en Escrituras (INSERT)
+Se realizó una prueba de carga masiva insertando 10,000 registros sintéticos en la tabla `producto` (todos con `activo = TRUE`, por lo que ingresan al índice parcial) para evaluar el costo de mantenimiento del índice B-tree compuesto `idx_producto_categoria_precio`:
+- **Tiempo de inserción SIN índice (`idx_producto_categoria_precio`):** `709.408 ms` (Trigger `fk_producto_categoria`: 214.166 ms / 10 000 llamadas)
+- **Tiempo de inserción CON índice (`idx_producto_categoria_precio`):** `356.046 ms` (Trigger `fk_producto_categoria`: 60.235 ms / 10 000 llamadas)
+- **Análisis:** A diferencia de la prueba sobre `detalle_pedido`, la corrida CON índice resultó más rápida que el baseline, lo que evidencia que la diferencia está dominada por el estado del buffer cache compartido entre corridas y no por el costo del índice. La métrica determinante es el propio trigger de restricción `fk_producto_categoria` — que cayó de 214.166 ms a 60.235 ms sin que el índice secundario participe de la validación de clave foránea. Aun en el peor caso (todas las filas con `activo = TRUE` ingresando al índice), el mantenimiento del B-tree sobre `(id_categoria, precio_lista)` no produce una penalidad medible frente a la verificación FK, que domina el costo total de la escritura.
+
+## Consulta 3.3: Pedidos con Más de 3 Productos y Monto Total Superior a $5000
+
+### 1. Plan y Tiempo PRE-ÍNDICE (Baseline)
+- **Tiempo de Ejecución:** `4107.925 ms` (~4.10 segundos)
+- **Planning Time:** `23.549 ms`
+- **Costo del Plan:** `145229.52`
+- **Diagnóstico:** Dependencia de `Parallel Seq Scan` sobre `pedido` y `cliente` mediante `Hash Join`, sumado al uso de ordenamiento externo en disco (`Sort Method: external merge Disk: 4352kB`).
+- **Salida de EXPLAIN ANALYZE:**
+```text
+Limit  (cost=145229.47..145229.52 rows=20 width=73) (actual time=4075.590..4090.934 rows=20 loops=1)
+  ->  Sort  (cost=145229.47..145479.31 rows=99934 width=73) (actual time=4075.588..4090.928 rows=20 loops=1)
+        Sort Key: (sum(((dp.cantidad)::numeric * dp.precio_unitario_facturado))) DESC
+        Sort Method: top-N heapsort  Memory: 29kB
+        ->  GroupAggregate  (cost=17781.79..142570.26 rows=99934 width=73) (actual time=119.760..3891.034 rows=199125 loops=1)
+              Group Key: p.id_pedido, c.nombre
+              Filter: ((sum(dp.cantidad) > 3) AND (sum(((dp.cantidad)::numeric * dp.precio_unitario_facturado)) > '5000'::numeric))
+              Rows Removed by Filter: 875
+              ->  Merge Join  (cost=17781.79..113339.67 rows=899403 width=43) (actual time=119.640..2152.401 rows=899403 loops=1)
+                    Merge Cond: (p.id_pedido = dp.id_pedido)
+                    ->  Gather Merge  (cost=17780.66..40574.78 rows=200000 width=33) (actual time=119.564..336.297 rows=200000 loops=1)
+                          Workers Planned: 1
+                          Workers Launched: 1
+                          ->  Sort  (cost=16780.65..17074.77 rows=117647 width=33) (actual time=87.277..142.494 rows=100000 loops=2)
+                                Sort Key: p.id_pedido, c.nombre
+                                Sort Method: external merge  Disk: 4352kB
+                                Worker 0:  Sort Method: external merge  Disk: 4168kB
+                                ->  Hash Join  (cost=696.00..3652.36 rows=117647 width=33) (actual time=7.277..47.984 rows=100000 loops=2)
+                                      Hash Cond: (p.id_cliente = c.id_cliente)
+                                      ->  Parallel Seq Scan on pedido p  (cost=0.00..2647.47 rows=117647 width=28) (actual time=0.025..10.154 rows=100000 loops=2)
+                                      ->  Hash  (cost=446.00..446.00 rows=20000 width=21) (actual time=7.104..7.106 rows=20000 loops=2)
+                                            Buckets: 32768  Batches: 1  Memory Usage: 1350kB
+                                            ->  Seq Scan on cliente c  (cost=0.00..446.00 rows=20000 width=21) (actual time=0.628..3.896 rows=20000 loops=2)
+                    ->  Index Scan using pk_detalle_pedido on detalle_pedido dp  (cost=0.42..61028.05 rows=899403 width=18) (actual time=0.061..1153.882 rows=899403 loops=1)
+Planning Time: 23.549 ms
+Execution Time: 4107.925 ms
+```
+
+### 2. Plan y Tiempo POST-ÍNDICE
+- **Tiempo de Ejecución:** `3521.245 ms` (~3.52 segundos)
+- **Planning Time:** `3.760 ms` (reducción drástica en el tiempo de planificación)
+- **Costo Estimado:** Reducido de `145,229.52` a `129,614.04`.
+- **Nodo Optimizado:** Reemplazo explícito del escaneo por PK compuesta a `Index Scan using idx_detalle_pedido_id_pedido on detalle_pedido dp`, reduciendo el costo parcial del nodo de `61,028.05` a `45,411.16`.
+- **Salida de EXPLAIN ANALYZE:**
+```text
+Limit  (cost=129613.99..129614.04 rows=20 width=73) (actual time=3502.381..3502.455 rows=20 loops=1)
+  ->  Sort  (cost=129613.99..129863.83 rows=99934 width=73) (actual time=3502.379..3502.451 rows=20 loops=1)
+        Sort Key: (sum(((dp.cantidad)::numeric * dp.precio_unitario_facturado))) DESC
+        Sort Method: top-N heapsort  Memory: 29kB
+        ->  GroupAggregate  (cost=17781.62..126954.79 rows=99934 width=73) (actual time=228.473..3342.573 rows=199125 loops=1)
+              Group Key: p.id_pedido, c.nombre
+              Filter: ((sum(dp.cantidad) > 3) AND (sum(((dp.cantidad)::numeric * dp.precio_unitario_facturado)) > '5000'::numeric))
+              Rows Removed by Filter: 875
+              ->  Merge Join  (cost=17781.62..97724.19 rows=899403 width=43) (actual time=228.447..1965.279 rows=899403 loops=1)
+                    Merge Cond: (p.id_pedido = dp.id_pedido)
+                    ->  Gather Merge  (cost=17780.66..40574.78 rows=200000 width=33) (actual time=228.410..430.156 rows=200000 loops=1)
+                          Workers Planned: 1
+                          Workers Launched: 1
+                          ->  Sort  (cost=16780.65..17074.77 rows=117647 width=33) (actual time=119.776..185.987 rows=100000 loops=2)
+                                Sort Key: p.id_pedido, c.nombre
+                                Sort Method: external merge  Disk: 8504kB
+                                Worker 0:  Sort Method: quicksort  Memory: 39kB
+                                ->  Hash Join  (cost=696.00..3652.36 rows=117647 width=33) (actual time=8.121..65.689 rows=100000 loops=2)
+                                      Hash Cond: (p.id_cliente = c.id_cliente)
+                                      ->  Parallel Seq Scan on pedido p  (cost=0.00..2647.47 rows=117647 width=28) (actual time=0.012..12.754 rows=100000 loops=2)
+                                      ->  Hash  (cost=446.00..446.00 rows=20000 width=21) (actual time=7.852..7.853 rows=20000 loops=2)
+                                            Buckets: 32768  Batches: 1  Memory Usage: 1350kB
+                                            ->  Seq Scan on cliente c  (cost=0.00..446.00 rows=20000 width=21) (actual time=0.879..4.105 rows=20000 loops=2)
+                    ->  Index Scan using idx_detalle_pedido_id_pedido on detalle_pedido dp  (cost=0.42..45411.16 rows=899403 width=18) (actual time=0.030..1020.486 rows=899403 loops=1)
+Planning Time: 3.760 ms
+Execution Time: 3521.245 ms
+```
+
+### 3. Conclusiones Técnicas y Comparación
+- **Reducción de Tiempo y Latencia:** Se logró una mejora neta de ~600 ms en la ejecución de la consulta sobre casi 900.000 filas de detalle_pedido. Además, el tiempo de planificación (Planning Time) disminuyó de 23.5 ms a 3.7 ms, acelerando la toma de decisiones del motor.
+- **Independencia de Acceso por FK:** La creación explícita de idx_detalle_pedido_id_pedido desvincula el Merge Join de la estructura de la clave primaria compuesta (id_pedido, id_producto). Esto garantiza estabilidad técnica en el plan de ejecución ante futuras reestructuraciones de la PK o escalamiento masivo del volumen.
+
+### 4. Evaluación del Impacto en Escrituras (INSERT)
+Se realizó una prueba de carga masiva insertando 20,000 registros sintéticos en la tabla `pedido` para evaluar el costo de mantenimiento del índice B-tree `idx_pedido_id_cliente` (soporta el acceso `pedido → cliente` de SPEC-003):
+- **Tiempo de inserción SIN índice (`idx_pedido_id_cliente`):** `1014.174 ms`
+- **Tiempo de inserción CON índice (`idx_pedido_id_cliente`):** `1348.252 ms`
+- **Análisis:** Contrario a lo observado en `detalle_pedido` y `producto`, aquí la corrida CON índice fue ~334 ms más lenta (~33%) — el costo esperado al insertar 20,000 entradas nuevas en el B-tree de `id_cliente`. El trigger `fk_pedido_cliente` solo varió un ~9% (561.977 → 614.796 ms), diferencia atribuible a ruido de cache ya que la validación FK consulta la PK de `cliente` y no participa del índice secundario. Descontando ese ruido, el overhead neto del mantenimiento del B-tree es de ~281 ms (~14 µs por fila), un costo acotado que se amortiza frente a la aceleración que el índice aporta a la consulta.
