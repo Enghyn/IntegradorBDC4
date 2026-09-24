@@ -305,3 +305,180 @@ Se realizó una prueba de carga masiva insertando 20,000 registros sintéticos e
 - **Tiempo de inserción SIN índice (`idx_pedido_id_cliente`):** `1014.174 ms`
 - **Tiempo de inserción CON índice (`idx_pedido_id_cliente`):** `1348.252 ms`
 - **Análisis:** Contrario a lo observado en `detalle_pedido` y `producto`, aquí la corrida CON índice fue ~334 ms más lenta (~33%) — el costo esperado al insertar 20,000 entradas nuevas en el B-tree de `id_cliente`. El trigger `fk_pedido_cliente` solo varió un ~9% (561.977 → 614.796 ms), diferencia atribuible a ruido de cache ya que la validación FK consulta la PK de `cliente` y no participa del índice secundario. Descontando ese ruido, el overhead neto del mantenimiento del B-tree es de ~281 ms (~14 µs por fila), un costo acotado que se amortiza frente a la aceleración que el índice aporta a la consulta.
+
+---
+
+# Parte C — Vista Materializada: Facturación por Categoría y Mes
+
+## 1. Reporte elegido y justificación
+
+Se eligió el reporte de **facturación por categoría de producto y mes** porque es el agregado
+más costoso del set analítico. Para responderlo el motor debe recorrer la **totalidad de las
+~700.000 líneas de `detalle_pedido`**, unirlas con `pedido` (~200.000), `producto` (~50.000)
+y `categoria`, y agregar todo por categoría y mes (`Seq Scan` completo + `GroupAggregate`).
+A diferencia de las consultas 3.1–3.3 (que acotan el trabajo con `LIMIT`, top-N o `HAVING`),
+este reporte no tiene ningún filtro que recorte las filas a procesar: cada ejecución paga el
+costo completo del join y la agregación.
+
+Una **vista materializada** precomputa ese agregado y lo persiste como una tabla física: la
+consulta pasa de recorrer ~1M de filas en caliente a leer el snapshot precalculado, reduciendo
+el tiempo de respuesta de segundos a pocos milisegundos.
+
+## 2. Objeto creado
+
+- **Archivo:** `TP5/materializadas.sql`
+- **Vista materializada:** `mv_facturacion_categoria_mes` creada con **`WITH DATA`** (poblada
+  al momento del `CREATE`, no queda vacía).
+- **Índice único:** `idx_mv_facturacion_cat_mes_unq` sobre `(categoria_id, mes)` — requisito de
+  PostgreSQL para poder ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY` a futuro.
+- **Incluye:** verificación de equivalencia `EXCEPT` bidireccional contra la consulta manual
+  y módulo de medición con `EXPLAIN (ANALYZE, BUFFERS, TIMING)`.
+
+## 3. Verificación de equivalencia (EXCEPT bidireccional)
+
+La MV se contrastó contra la consulta analítica original sin materializar (misma proyección y
+agrupamiento). Ambos sentidos del `EXCEPT` deben devolver **0 filas**:
+
+- Resultado EXCEPT (MV → consulta): **0 filas** — coincide con lo esperado.
+- Resultado EXCEPT (consulta → MV): **0 filas** — coincide con lo esperado.
+
+## 4. Medición de tiempos: MV vs consulta original
+
+Metodología: `EXPLAIN (ANALYZE, BUFFERS, TIMING)` sobre la base local con datos masivos
+(10 categorías, 20.000 clientes, 50.000 productos, 200.000 pedidos, ~700.000 detalles).
+Los bloques de medición están en `TP5/materializadas.sql` (Bloques A, B y C). El tiempo del
+`REFRESH CONCURRENTLY` no tiene plan de ejecución (utility statement), por lo que se tomó de
+la estadística de ejecución de DBeaver (Execute time).
+
+| Medición | Execution Time | Planning Time | Nodos principales |
+|---|---|---|---|
+| Consulta original (sin materializar) | `2797.623 ms` | `0.855 ms` | `GroupAggregate` + `Merge Join` + `Gather Merge` paralelo (2 workers), `Seq Scan` sobre `detalle_pedido` (~899k filas), sort externo en disco |
+| `SELECT` desde `mv_facturacion_categoria_mes` | `0.042 ms` | `0.078 ms` | `Seq Scan` sobre la MV (70 filas) |
+| `REFRESH MATERIALIZED VIEW CONCURRENTLY` | ~10 s (Execute time, DBeaver) | — | Utility statement — sin plan; 70 filas actualizadas |
+
+> **Resultado:** la consulta original tarda **2797.623 ms** y la vista materializada **0.042 ms**,
+> una mejora de **~66.600×** (≈ 4 órdenes de magnitud). El refresh concurrente insume ~10 s y
+> se paga una vez por corrida, fuera de horario pico.
+
+### Bloque A — Consulta original (baseline)
+
+```text
+GroupAggregate  (cost=64828.32..212302.12 rows=899403 width=242) (actual time=1058.799..2775.595 rows=70 loops=1)
+  Group Key: c.id_categoria, date_trunc('month'::text, p.fecha_pedido)
+  Buffers: shared hit=10375 read=197, temp read=6393 written=6412
+  ->  Merge Join  (cost=64828.32..183071.52 rows=899403 width=212) (actual time=1055.170..2174.206 rows=899403 loops=1)
+        Merge Cond: (pr.id_categoria = c.id_categoria)
+        Buffers: shared hit=10375 read=197, temp read=6393 written=6412
+        ->  Gather Merge  (cost=64798.84..169549.14 rows=899403 width=34) (actual time=1055.098..1673.985 rows=899403 loops=1)
+              Workers Planned: 2
+              Workers Launched: 2
+              Buffers: shared hit=10374 read=197, temp read=6393 written=6412
+              ->  Sort  (cost=63798.82..64735.69 rows=374751 width=34) (actual time=906.540..1105.620 rows=299801 loops=3)
+                    Sort Key: pr.id_categoria, (date_trunc('month'::text, p.fecha_pedido)), p.id_pedido
+                    Sort Method: external merge  Disk: 10536kB
+                    Buffers: shared hit=10374 read=197, temp read=6393 written=6412
+                    Worker 0:  Sort Method: external merge  Disk: 20944kB
+                    Worker 1:  Sort Method: external merge  Disk: 19664kB
+                    ->  Hash Join  (cost=6528.12..18857.17 rows=374751 width=34) (actual time=50.623..341.373 rows=299801 loops=3)
+                          Hash Cond: (dp.id_producto = pr.id_producto)
+                          Buffers: shared hit=10284 read=197
+                          ->  Parallel Hash Join  (cost=4559.12..15904.38 rows=374751 width=34) (actual time=31.301..179.832 rows=299801 loops=3)
+                                Hash Cond: (dp.id_pedido = p.id_pedido)
+                                Buffers: shared hit=8329 read=197
+                                ->  Parallel Seq Scan on detalle_pedido dp  (cost=0.00..10361.51 rows=374751 width=26) (actual time=0.013..27.886 rows=299801 loops=3)
+                                      Buffers: shared hit=6417 read=197
+                                ->  Parallel Hash  (cost=3088.50..3088.50 rows=117650 width=16) (actual time=30.605..30.606 rows=66668 loops=3)
+                                      Buckets: 262144  Batches: 1  Memory Usage: 11456kB
+                                      Buffers: shared hit=1912
+                                      ->  Parallel Seq Scan on pedido p  (cost=0.00..3088.50 rows=117650 width=16) (actual time=0.016..15.049 rows=100002 loops=2)
+                                            Buffers: shared hit=1912
+                          ->  Hash  (cost=1219.00..1219.00 rows=60000 width=16) (actual time=19.044..19.045 rows=60000 loops=3)
+                                Buckets: 65536  Batches: 1  Memory Usage: 3325kB
+                                Buffers: shared hit=1857
+                                ->  Seq Scan on producto pr  (cost=0.00..1219.00 rows=60000 width=16) (actual time=0.610..8.517 rows=60000 loops=3)
+                                      Buffers: shared hit=1857
+        ->  Sort  (cost=29.48..30.41 rows=370 width=186) (actual time=0.062..0.073 rows=10 loops=1)
+              Sort Key: c.id_categoria
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=1
+              ->  Seq Scan on categoria c  (cost=0.00..13.70 rows=370 width=186) (actual time=0.040..0.043 rows=10 loops=1)
+                    Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=22
+Planning Time: 0.855 ms
+Execution Time: 2797.623 ms
+```
+
+### Bloque B — Consulta sobre la vista materializada
+
+```text
+Seq Scan on mv_facturacion_categoria_mes  (cost=0.00..1.70 rows=70 width=242) (actual time=0.017..0.023 rows=70 loops=1)
+  Buffers: shared hit=1
+Planning Time: 0.078 ms
+Execution Time: 0.042 ms
+```
+
+### Bloque C — REFRESH MATERIALIZED VIEW CONCURRENTLY
+
+```text
+QUERY PLAN
+-----------------------------------------+
+Utility statements have no plan structure|
+```
+
+El `REFRESH CONCURRENTLY` es una *utility statement*: PostgreSQL no genera plan de ejecución.
+El tiempo se registró desde la estadística de ejecución de DBeaver:
+
+| Métrica | Valor |
+|---|---|
+| Updated Rows | 70 |
+| Execute time | 10 s |
+| Start time | Thu Sep 24 10:45:19 GMT-03:00 2026 |
+| Finish time | Thu Sep 24 10:45:31 GMT-03:00 2026 |
+
+## 5. Frecuencia del REFRESH MATERIALIZED VIEW — justificación
+
+**Recomendación:** ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_facturacion_categoria_mes`
+con **frecuencia diaria (nocturna, p. ej. 03:00)**, programada por un job externo
+(cron / pg_cron o el scheduler del entorno).
+
+Justificación:
+
+1. **Baja volatilidad del dato agregado.** El reporte agrega por categoría y mes: las celdas
+   de meses ya cerrados **no cambian** (histórico de facturación). Solo la celda del mes en
+   curso se actualiza a medida que entran pedidos nuevos; un refresh diario captura esa
+   variación con retraso máximo de 24 h.
+2. **Tolerancia del consumidor.** El reporte es de tipo gerencial/acumulado: no requiere
+   exactitud al segundo. Un dashboard que muestre la facturación de hoy con el dato de ayer
+   es aceptable; exigir frescura al-minuto justificaría otro diseño (consultar tablas base).
+3. **Costo del refresh vs. beneficio.** Cada refresh paga el costo de recomputar el snapshot
+   (Bloque C: **~10 s** medidos, 70 filas actualizadas). Hacerlo cada hora multiplicaría ese
+   costo ~24× durante horas de operación para un dato que cambia marginalmente; hacerlo cada
+   día lo paga una sola vez, fuera de horario pico.
+4. **Elección de `CONCURRENTLY`.** Se usa la variante concurrente para que el refresh **no
+   bloquee las lecturas**: los usuarios siguen viendo el snapshot vigente mientras se
+   construye el nuevo. Esto es clave porque el reporte está pensado para consulta continua.
+   Si se usara un `REFRESH` simple (sin `CONCURRENTLY`), el motor tomaría un bloqueo
+   `ACCESS EXCLUSIVE` y las consultas al reporte quedarían en espera durante la
+   reconstrucción.
+
+**Alternativa si cambia el requisito:** si el reporte se integrara a un dashboard
+casi-real-time, podría subirse a refresco horario (el costo por corrida está medido en el
+Bloque C); no se recomienda menos de 1 h por el costo agregado.
+
+## 6. Qué implica para los usuarios que el dato no se actualice en cada REFRESH
+
+- **La vista materializada es un snapshot, no la tabla base.** Entre un `REFRESH` y el
+  siguiente, el reporte muestra el estado de la facturación **al momento del último refresco**.
+  Los pedidos ingresados después de ese instante **no aparecen** hasta la próxima corrida.
+- **Retraso máximo conocido = frecuencia del refresh.** Con refresco diario, el dato puede
+  estar desactualizado hasta 24 h. Para meses cerrados es irrelevante (no cambian); solo la
+  celda del mes corriente sufre el desfase.
+- **Consistencia eventual aceptada por diseño.** El consumidor debe saber que la "facturación
+  del mes" puede quedar corta respecto de lo realmente facturado hasta que corra el job. Si
+  una decisión exige el dato exacto al minuto, debe consultarse la consulta original sobre
+  tablas base (costo mayor) o reducir la frecuencia de refresh.
+- **Lecturas nunca bloqueadas por el refresh concurrente.** Gracias al índice único y a
+  `CONCURRENTLY`, la actualización construye el snapshot nuevo sin `ACCESS EXCLUSIVE`: el
+  usuario lee la versión vieja mientras se actualiza, y percibe el cambio recién cuando el
+  swap termina. Esto es una **ventaja de disponibilidad** frente al refresh simple.

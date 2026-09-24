@@ -147,3 +147,26 @@ ON mv_facturacion_categoria_mes (categoria_id, mes);
   - **Aceptación**: Se aceptó la propuesta de la IA porque cumple con la estructura requerida, incluye el parámetro WITH DATA para poblar la vista desde el inicio y genera el índice único con la combinación exacta de columnas (categoria_id, mes), lo cual habilita el comando REFRESH MATERIALIZED VIEW CONCURRENTLY sin bloquear las lecturas del sistema.
 
   - **Prueba de equivalencia**: Se contrastaron los resultados arrojados por un SELECT * FROM mv_facturacion_categoria_mes frente a la consulta analítica sin materializar de la Semana 4, comprobando que los totales de facturación y unidades coinciden de forma exacta.
+
+### Interacción 2 — Completado de la Parte C (entregables finales)
+
+- **Prompt/spec entregado a la IA:** "Completar la Parte C del TP5: materializar la vista en un archivo SQL propio, dejar el módulo de medición de tiempos (consulta original vs. vista materializada) y documentar la frecuencia de refresco con sus implicancias de consistencia."
+- **Propuesta de la IA:** crear el archivo `TP5/materializadas.sql` (MV con `WITH DATA` + índice único + verificación `EXCEPT` + bloques `EXPLAIN (ANALYZE, BUFFERS, TIMING)` con marcadores de salida), dejar la sección "Parte C" en `TP5/informe_mediciones.md` con la justificación de frecuencia de refresco y las implicancias de consistencia, y expandir la spec en `TP5/specs/vista_materializada_facturacion_categoria_mes.md`.
+- **Aceptado:** sí. La frecuencia recomendada quedó en **refresco diario nocturno con `REFRESH ... CONCURRENTLY`** (celdas históricas no cambian; solo la del mes corriente; costo del refresh medido una vez por día fuera de horario pico; lecturas nunca bloqueadas gracias al índice único).
+- **Modificado:** se documentaron los marcadores `[PEGAR SALIDA]` / `[PEGAR NÚMERO]` para que las mediciones se completen con la corrida local real del estudiante (Bloques A, B y C del script).
+- **Descartado:** refresco con `REFRESH MATERIALIZED VIEW` simple (bloquea lecturas con `ACCESS EXCLUSIVE` durante la reconstrucción) y refresco sub-horario (costo diario multiplicado sin beneficio para un reporte mensual/categoría).
+
+---
+
+## Verificación (Parte C)
+
+- Se generó `TP5/materializadas.sql`; la vista `mv_facturacion_categoria_mes` se crea con
+  `WITH DATA`, el índice único `idx_mv_facturacion_cat_mes_unq (categoria_id, mes)` habilita
+  el refresh concurrente, y los 2 bloques `EXCEPT` devolvieron **0 filas** (corrida local
+  del 2026-09-24 sobre `tp_food_store`).
+- Mediciones de tiempo (base local, datos masivos):
+  - Consulta original sin materializar: `2797.623 ms` (Planning 0.855 ms).
+  - `SELECT` desde la MV: `0.042 ms` (Planning 0.078 ms) → mejora ≈ **66.600×**.
+  - `REFRESH MATERIALIZED VIEW CONCURRENTLY`: ~10 s (70 filas actualizadas; sin plan por
+    ser utility statement, tiempo tomado de la estadística de DBeaver).
+- Salidas completas de los bloques A, B y C pegadas en `TP5/informe_mediciones.md` → Parte C.
