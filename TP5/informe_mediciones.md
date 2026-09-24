@@ -1,5 +1,41 @@
 # Informe de Mediciones y Optimización de Consultas
 
+> **Contexto de medición:** base local `tp_food_store` (PostgreSQL 16+) con datos
+> masivos. El volumen real de `detalle_pedido` varió entre corridas por las cargas del
+> benchmark de escritura; cada sección declara su snapshot (ver "Dataset por medición").
+
+## Tabla resumen — Parte A (Índices)
+
+| Consulta | Pre (ms) | Post (ms) | Mejora | Plan pre | Plan post | Criterio "1 orden de magnitud" |
+|---|---|---|---|---|---|---|
+| 3.1 Top 10 clientes por gasto | 3612.970 | 3478.948 | ~3.7% | Seq Scan (3 tablas) + Sort en disco | Seq Scan (3 tablas) + Sort en disco | NO |
+| 3.2 Productos sobre promedio de categoría | 251402.102 | 149374.371 | ~40.6% | SubPlans con Bitmap Heap Scan | SubPlans con Index Only Scan (Heap Fetches: 0) | NO |
+| 3.3 Pedidos con >3 productos y monto >$5000 | 4107.925 | 3521.245 | ~14.3% | Parallel Seq Scan + Merge Join (PK) | Merge Join (índice dedicado) | NO |
+
+> **Veredicto frente al criterio del enunciado:** ninguna consulta alcanzó el "orden de
+> magnitud" del ejemplo. Se documenta el resultado honesto de cada una y la justificación
+> técnica por la que un índice no puede cambiar el plan en agregaciones sin filtro
+> selectivo previo (3.1 y 3.3 son agregaciones top-N; 3.2 mejora la I/O un 96% pero
+> conserva el costo de la subconsulta correlacionada).
+
+## Dataset por medición (Parte A)
+
+Las corridas no se hicieron sobre un snapshot congelado: el benchmark de escritura de la
+sección 3.1 insertó 100.000 filas en `detalle_pedido` y el de 3.3 insertó 20.000 en
+`pedido`, modificando el volumen entre mediciones.
+
+| Sección | `detalle_pedido` | `pedido` | `producto` | `cliente` |
+|---|---|---|---|---|
+| 3.1 PRE/POST | 699.423 | 200.000 | 50.000 | 20.000 (19.033 activos) |
+| 3.2 PRE/POST | — (no participa) | — | 50.000 (22.425 en resultado) | — |
+| 3.3 PRE/POST | 899.403 | 200.000 | — | 20.000 |
+| Parte C (MV) | 899.403 | 200.000 | 60.000 | — |
+
+> **Nota 3.3:** el EXPLAIN embebido en `TP5/queries.sql` (baseline 772.892 ms, 700.410
+> detalles) corresponde a una corrida previa sobre otro snapshot; el baseline del informe
+> (4107.925 ms) es la corrida controlada sobre el dataset de la tabla. Ambos se etiquetan
+> sin alterar los números.
+
 ## Consulta 3.1: Top 10 Clientes por Gasto Total
 
 ### 1. Plan y Tiempo PRE-ÍNDICE (Baseline)
@@ -50,8 +86,8 @@ Execution Time: 3612.970 ms
     ON detalle_pedido (id_pedido);
 ### 3. Plan y Tiempo POST-ÍNDICE
 - **Tiempo de Ejecución:** `3478.948 ms`
-- **Estrategia de Planificación:** `Seq Scan` secuencial sobre `detalle_pedido`, `pedido` y `cliente`, con ordenamiento externo en disco (`external merge Disk: 34568kB`)[cite: 1].
-- **Análisis de Impacto / Conclusión:** Se evidencia que el motor mantiene la estrategia de `Seq Scan` ya que la consulta requiere procesar y agregar la totalidad de las 699,423 filas de `detalle_pedido` (alta Selectividad/Scan Completo) para computar el `SUM` antes del `LIMIT 10`[cite: 1]. El optimizador determina de manera correcta que el escaneo secuencial por páginas reduce el costo total de I/O frente a accesos por árbol B-tree[cite: 1].
+- **Estrategia de Planificación:** `Seq Scan` secuencial sobre `detalle_pedido`, `pedido` y `cliente`, con ordenamiento externo en disco (`external merge Disk: 34568kB`).
+- **Análisis de Impacto / Conclusión:** El motor mantiene la estrategia de `Seq Scan` porque la consulta requiere procesar y agregar la totalidad de las 699,423 filas de `detalle_pedido` (alta selectividad/scan completo) para computar el `SUM` antes del `LIMIT 10`. El optimizador determina correctamente que el escaneo secuencial por páginas reduce el costo total de I/O frente a accesos por árbol B-tree en un patrón de agregación sin filtro previo. Por eso, el índice propuesto para esta consulta (`idx_cliente_activo`) se **descartó tras la medición** (ver sección 5).
 - **Salida de EXPLAIN ANALYZE:**
 Limit  (cost=125879.36..125879.38 rows=10 width=61) (actual time=3442.344..3442.353 rows=10 loops=1)
   Buffers: shared hit=6860, temp read=6632 written=6646
@@ -98,7 +134,9 @@ Se realizó una prueba de carga masiva insertando 100,000 registros aleatorios e
 - **Propuesta Descartada 1:** Creación de un índice B-tree completo sobre la columna `cliente.activo` (`CREATE INDEX idx_cliente_activo_full ON cliente (activo)`).
   - **Justificación Técnica:** La columna `activo` es de tipo `BOOLEAN` (baja cardinalidad, donde el ~95% de los clientes están en estado `TRUE`). Un índice tradicional completo sería descartado por el optimizador debido a la baja selectividad. En su lugar, se eligió un **Índice Parcial** (`WHERE activo = TRUE`), reduciendo el tamaño en disco y eliminando sobrecostos para registros inactivos.
 - **Propuesta Descartada 2:** Creación de un índice compuesto sobre `(id_pedido, id_producto)` en `detalle_pedido`.
-  - **Justificación Técnica:** La tabla ya cuenta con una Clave Primaria compuesta sobre `(id_pedido, id_producto)`. PostgreSQL crea automáticamente un índice B-tree único para soportarla, por lo que agregar una propuesta idéntica por parte de la IA representaba un caso directo de **sobreindexación y redundancia**.                                                                                       
+  - **Justificación Técnica:** La tabla ya cuenta con una Clave Primaria compuesta sobre `(id_pedido, id_producto)`. PostgreSQL crea automáticamente un índice B-tree único para soportarla, por lo que agregar una propuesta idéntica por parte de la IA representaba un caso directo de **sobreindexación y redundancia**.
+- **Propuesta Descartada 3 (post-medición):** Índice parcial `idx_cliente_activo` sobre `cliente(id_cliente) WHERE activo = TRUE`, que inicialmente se había aceptado en SPEC-001.
+  - **Justificación Técnica:** tras medir, el plan no cambió (sigue `Seq Scan` sobre `cliente`) y el tiempo varió de 3612.970 ms a 3478.948 ms (~3.7%, dentro del ruido). El costo real de la consulta es la agregación top-N sobre ~699.000 filas de `detalle_pedido`, no el filtro por `activo` de una tabla de 20.000 filas. Mantenerlo sumaría overhead de escritura sin beneficio medible, por lo que se lo movió al bloque DESCARTADO de `indices.sql` y **no se crea**.                                                                                       
 
 ## Consulta 3.2: Productos con Precio Superior al Promedio de su Categoría
 
@@ -305,6 +343,28 @@ Se realizó una prueba de carga masiva insertando 20,000 registros sintéticos e
 - **Tiempo de inserción SIN índice (`idx_pedido_id_cliente`):** `1014.174 ms`
 - **Tiempo de inserción CON índice (`idx_pedido_id_cliente`):** `1348.252 ms`
 - **Análisis:** Contrario a lo observado en `detalle_pedido` y `producto`, aquí la corrida CON índice fue ~334 ms más lenta (~33%) — el costo esperado al insertar 20,000 entradas nuevas en el B-tree de `id_cliente`. El trigger `fk_pedido_cliente` solo varió un ~9% (561.977 → 614.796 ms), diferencia atribuible a ruido de cache ya que la validación FK consulta la PK de `cliente` y no participa del índice secundario. Descontando ese ruido, el overhead neto del mantenimiento del B-tree es de ~281 ms (~14 µs por fila), un costo acotado que se amortiza frente a la aceleración que el índice aporta a la consulta.
+
+---
+
+# Parte B — Verificación de Equivalencia de Vistas
+
+Las tres vistas definidas en `TP5/views.sql` se verificaron contra su consulta manual
+equivalente con `EXCEPT` bidireccional: ambos sentidos deben devolver **0 filas**.
+
+| Vista | EXCEPT (vista → consulta) | EXCEPT (consulta → vista) | Resultado |
+|---|---|---|---|
+| `vista_productos_vigentes_categoria` | 0 filas | 0 filas | ✅ equivalente |
+| `vista_pedidos_usuario` | 0 filas | 0 filas | ✅ equivalente |
+| `vista_detalle_pedido_producto` | 0 filas | 0 filas | ✅ equivalente |
+
+**Criterio de seguridad (vista 2):** `vista_pedidos_usuario` expone `id_cliente` y
+`nombre_cliente` pero **oculta `email` y `telefono`** de `cliente` (principio de menor
+privilegio). El esquema no posee columna `password`; se protegen los datos de contacto
+personales, de modo que puede otorgarse `SELECT` sobre la vista sin dar acceso a la tabla
+base `cliente`.
+
+> Corrida: 2026-09-24 sobre `tp_food_store`. Bloques EXCEPT por vista (ambos sentidos)
+> en `TP5/views.sql`.
 
 ---
 

@@ -1,9 +1,9 @@
 ﻿# SPEC-001 — Optimización de la Consulta de Ranking de Clientes por Facturación Histórica
 
-**Archivo afectado:** `food_store/queries.sql` (Consulta 3.1, Versión A)
+**Archivo afectado:** `TP5/queries.sql` (Consulta 3.1, Versión A)
 **Base de datos:** `tp_food_store` (PostgreSQL)
 **Fecha:** 2025-07
-**Estado:** Propuesta
+**Estado:** Propuesta (Índice 1 descartado tras medición — ver sección 6)
 
 ---
 
@@ -39,7 +39,7 @@ LIMIT 10;
 | Parámetro                      | Valor                                     |
 |--------------------------------|-------------------------------------------|
 | Motor                          | PostgreSQL                                |
-| Base de datos                  | `tp_food_store`                           |
+| Base de datos                  | `tp_food_store`                      |
 | Volumen — `cliente`            | 20 000 filas                              |
 | Volumen — `pedido`             | 200 000 filas                             |
 | Volumen — `detalle_pedido`     | ~700 000 filas                            |
@@ -102,9 +102,17 @@ latencia impacta directamente la experiencia del usuario en el dashboard.
 Crear dos índices adicionales **sin modificar el modelo de datos ni las tablas base**,
 consistente con la restricción del trabajo práctico.
 
-### Índice 1 — Índice parcial sobre `cliente(activo)`
+### Índice 1 — Índice parcial sobre `cliente(activo)` — **DESCARTADO TRAS MEDICIÓN**
+
+> **Estado (2026-09-24):** el índice se propuso inicialmente, pero tras la medición en
+> `informe_mediciones.md` (Consulta 3.1, sección 5) se **descartó**: el plan no cambió
+> (sigue `Seq Scan` sobre `cliente`) y el tiempo pasó de 3612.970 ms a 3478.948 ms
+> (~3.7%, dentro del ruido). El costo real es la agregación top-N sobre ~700k filas de
+> `detalle_pedido`, no el filtro por `activo` de una tabla de 20 000 filas. Por el
+> criterio de sobreindexación del TP **no se crea** (bloque DESCARTADO en `TP5/indices.sql`).
 
 ```sql
+-- DESCARTADO (no ejecutar)
 CREATE INDEX idx_cliente_activo
     ON cliente (id_cliente)
     WHERE activo = TRUE;
@@ -131,9 +139,23 @@ CREATE INDEX idx_detalle_pedido_id_pedido
   (`WHERE id_pedido = 1`) con resultados confirmados. La presente spec extiende su
   justificación al contexto de la consulta de ranking.
 
+### Resultado de la medición (actualización post-ejecución)
+
+| Índice | Estado | Evidencia |
+|---|---|---|
+| `idx_cliente_activo` (Índice 1) | **DESCARTADO** | Plan sin cambios (sigue `Seq Scan`); 3612.970 → 3478.948 ms (~3.7%, ruido) |
+| `idx_detalle_pedido_id_pedido` (Índice 2) | **MANTENIDO** | Aporta al acceso por FK en 3.1 y 3.3 (informe secciones 3.1 y 3.3) |
+
 ---
 
 ## 7. Criterios de aceptación
+
+> **Nota post-medición:** el CA-1 (sin Seq Scan) y el criterio "orden de magnitud" del
+> informe **no se cumplieron** para la consulta 3.1. Se mantiene el resultado honesto como
+> evidencia de que un índice no altera un plan de agregación top-N sin filtro selectivo
+> previo; los criterios verificables en esta entrega son la **documentación del
+> antes/después** (CA-2), la **equivalencia funcional** (CA-5) y el **descarte
+> justificado** de la propuesta inefectiva.
 
 ### CA-1 — Eliminación de escaneos secuenciales en tablas grandes
 
@@ -188,18 +210,15 @@ que debe devolver 0 filas en ambas direcciones.
 ## 8. Objetos a crear
 
 ```sql
--- Objeto 1: índice parcial en cliente para el filtro WHERE activo = TRUE
-CREATE INDEX idx_cliente_activo
-    ON cliente (id_cliente)
-    WHERE activo = TRUE;
-
--- Objeto 2: índice en detalle_pedido para agilizar el JOIN por id_pedido
-CREATE INDEX idx_detalle_pedido_id_pedido
+-- Objeto 1: índice en detalle_pedido para agilizar el JOIN por id_pedido
+CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id_pedido
     ON detalle_pedido (id_pedido);
+
+-- Índice 1 de esta spec (idx_cliente_activo): DESCARTADO tras medición — no se crea.
 ```
 
-> Estos objetos deben definirse en el archivo de índices/vistas de la semana,
-> **no** en `queries.sql` ni en `schema.sql`.
+> Este objeto debe definirse en `TP5/indices.sql`, **no** en `queries.sql`
+> ni en `schema.sql`.
 
 ---
 

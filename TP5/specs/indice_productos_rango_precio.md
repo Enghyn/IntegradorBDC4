@@ -1,6 +1,6 @@
 # SPEC-002 — Optimización de la Consulta de Productos con Precio Superior al Promedio de su Categoría
 
-**Archivo afectado:** `food_store/queries.sql` (Consulta 3.2, Versión A)
+**Archivo afectado:** `TP5/queries.sql` (Consulta 3.2, Versión A)
 **Base de datos:** `tp_food_store` (PostgreSQL)
 **Fecha:** 2025-07
 **Estado:** Propuesta
@@ -49,7 +49,7 @@ ORDER BY cat.nombre ASC, p.precio_lista DESC;
 | Parámetro                              | Valor                                              |
 |----------------------------------------|----------------------------------------------------|
 | Motor                                  | PostgreSQL                                         |
-| Base de datos                          | `tp_food_store`                                    |
+| Base de datos                          | `tp_food_store`                              |
 | Volumen — `producto`                   | 50 000 filas                                       |
 | Volumen — `categoria`                  | ~10 filas activas                                  |
 | Selectividad `activo` en `producto`    | Alta (mayoría activos = TRUE)                      |

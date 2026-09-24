@@ -118,12 +118,14 @@ Las consultas completas (3.1, 3.2 y sus verificaciones) están en `food_store/qu
 
 ### 3. Crear los índices
 
-Ejecutá el archivo `food_store/indices.sql` sobre `tp_food_store`. Crea los cuatro índices de optimización:
+Ejecutá el archivo `food_store/indices.sql` sobre `tp_food_store`. Crea los índices de optimización del workload:
 
-- `idx_cliente_activo` → índice parcial sobre `cliente(id_cliente)` para el filtro `activo = TRUE`.
 - `idx_detalle_pedido_id_pedido` → acceso por FK en `detalle_pedido(id_pedido)`.
 - `idx_producto_categoria_precio` → índice compuesto y parcial sobre `producto(id_categoria, precio_lista)`.
 - `idx_pedido_id_cliente` → acceso por FK en `pedido(id_cliente)`.
+- `idx_detalle_pedido_id_producto` → acceso por `id_producto` en `detalle_pedido` (segunda columna de la PK compuesta; habilita el `Index Scan` de la Consulta Nueva 2 del workload).
+
+La propuesta original de SPEC-001 incluía también `idx_cliente_activo` (índice parcial sobre `cliente(id_cliente) WHERE activo = TRUE`), pero fue **descartado tras la medición** (Descartado 3 en `informe_mediciones.md` → sección 5): el plan no cambió (sigue `Seq Scan` sobre `cliente`) y el tiempo varió de 3612.970 ms a 3478.948 ms (~3,7%, dentro del ruido). El costo real es la agregación top-N sobre ~700.000 filas de `detalle_pedido`, no el filtro por `activo`. Mantenerlo sumaría overhead de escritura sin beneficio, por lo que **no se crea** (queda documentado en el bloque DESCARTADO de `indices.sql`).
 
 Como usan `IF NOT EXISTS`, correrlo de nuevo no da error.
 

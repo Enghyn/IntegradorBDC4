@@ -5,8 +5,8 @@
 
 ## Herramientas utilizadas
 
-- **Kiro** — especificación de las vistas (specs en `food_store/specs/`).
-- **OpenCode** — generación del script SQL `food_store/views.sql` a partir de los specs.
+- **Kiro** — especificación de las vistas (specs en `TP5/specs/`).
+- **OpenCode** — generación del script SQL `TP5/views.sql` a partir de los specs.
 - **psql** — ejecución y verificación de equivalencia (`EXCEPT` bidireccional).
 - **Dbeaver** — (medición y profiling mediante `EXPLAIN (ANALYZE, BUFFERS, TIMING)`)
 
@@ -18,7 +18,7 @@
 ## Bitácora de interacciones
 ## Parte A — Índices y Optimización de Consultas
 
-**Herramientas utilizadas:** Kiro (especificación de specs en `food_store/specs/`), OpenCode (generación y edición del script DDL `food_store/indices.sql`) y DBeaver (medición y profiling mediante `EXPLAIN (ANALYZE, BUFFERS, TIMING)`).  
+**Herramientas utilizadas:** Kiro (especificación de specs en `TP5/specs/`), OpenCode (generación y edición del script DDL `TP5/indices.sql`) y DBeaver (medición y profiling mediante `EXPLAIN (ANALYZE, BUFFERS, TIMING)`).  
 **Propósito:** Identificar cuellos de botella en las consultas analíticas del sistema, diseñar índices secundarios/parciales en base al workload real y validar técnicamente la aceleración de tiempos de respuesta y reducción de I/O.
 
 ---
@@ -38,7 +38,7 @@
 - **Prompt/spec entregado a la IA:** "A partir de la especificación `SPEC-002` (`indice_productos_rango_precio.md`), proponer el índice adecuado (tipo, columnas y condición parcial) para optimizar la doble subconsulta correlacionada de precio promedio por categoría."
 - **Propuesta de la IA:** Crear un índice B-tree compuesto y parcial `idx_producto_categoria_precio` sobre `producto (id_categoria, precio_lista) WHERE activo = TRUE`.
 - **Aceptado:** Sí. La combinación de `id_categoria` (clave de correlación) con `precio_lista` (columna agregada) cubierta bajo la condición `activo = TRUE` habilita un Index-Only Scan con `Heap Fetches: 0`.
-- **Modificado:** Se incorporó la cláusula `IF NOT EXISTS` a la sentencia propuesta en el spec para cumplir con el estándar de idempotencia del proyecto en `food_store/indices.sql`.
+- **Modificado:** Se incorporó la cláusula `IF NOT EXISTS` a la sentencia propuesta en el spec para cumplir con el estándar de idempotencia del proyecto en `TP5/indices.sql`.
 - **Descartado:**
   1. Índice B-tree completo sobre `producto(activo)`: Descartado por baja cardinalidad (columna booleana con ~95% en `TRUE`).
   2. Índice simple sobre `producto(precio_lista)` sin `id_categoria`: Descartado porque las subconsultas agrupan estrictamente por `id_categoria`, lo que impediría al optimizador filtrar eficientemente por categoría.
@@ -61,6 +61,17 @@
 - **Resultado de Optimización (Consulta 3.2):**
   - **PRE-ÍNDICE:** `251,402.102 ms` (~251.40 segundos) con `35,099,763` shared hits y escaneos de páginas de datos `Bitmap Heap Scan`.
   - **POST-ÍNDICE:** `149,374.371 ms` (~149.37 segundos) logrando transformar las subconsultas a **`Index Only Scan`** con **`Heap Fetches: 0`** y reduciendo las lecturas a memoria en más de un **96%** (`1,298,390` shared hits).
+
+### Interacción 4 — Ajustes post-medición (descartes y alineación del workload)
+
+- **Prompt/spec entregado a la IA:** "Revisar el conjunto de índices tras las mediciones del informe para descartar los que no aportan y alinear la presencia/ausencia de índices con el workload documentado en `TP5/queries.sql`."
+- **Propuesta de la IA:** descartar el índice parcial `idx_cliente_activo` (impacto nulo documentado) y crear el índice `idx_detalle_pedido_id_producto` sobre la segunda columna de la PK compuesta para el lookup por producto.
+- **Aceptado:**
+  1. `idx_cliente_activo` → **descartado tras medición**: el plan no cambió (sigue `Seq Scan` sobre `cliente`) y el tiempo pasó de 3612.970 ms a 3478.948 ms (~3.7%, ruido). El costo real es la agregación top-N sobre ~700k filas, no el filtro por `activo`. Se documenta en `TP5/indices.sql` (bloque DESCARTADO) e `informe_mediciones.md` (Consulta 3.1, sección 5).
+  2. `idx_detalle_pedido_id_producto` → **aceptado como Objeto 4 de `TP5/indices.sql`**: convierte el `Parallel Seq Scan` de ~900k filas en un `Index Scan` puntual (workload de `queries.sql`, Consulta Nueva 2: 57.378 ms → 0.157 ms).
+- **Modificado:** rutas `food_store/` → `TP5/` y nombre de base normalizado a `tp_food_store` en toda la documentación.
+- **Descartado:** nada adicional.
+
 ## Parte B
 ### Interacción 1 — Spec de `vista_productos_vigentes_categoria`
 
@@ -94,59 +105,69 @@
 
 ---
 
-## Verificación
+## Verificación (Parte B)
 
-- Se ejecutó `food_store/views.sql` sobre `tp_food_store_local`.
+- Se ejecutó `TP5/views.sql` sobre `tp_food_store` (corrida 2026-09-24).
 - **Resultado:** los 6 bloques `EXCEPT` (3 vistas × 2 direcciones) devolvieron **0 filas**,
-  confirmando la equivalencia de cada vista contra su consulta manual.
+  confirmando la equivalencia de cada vista contra su consulta manual:
+  - `vista_productos_vigentes_categoria`: 0 filas (ambos sentidos)
+  - `vista_pedidos_usuario`: 0 filas (ambos sentidos)
+  - `vista_detalle_pedido_producto`: 0 filas (ambos sentidos)
 
 ## Parte C: Vista Materializada
 
-**Herramientas utilizadas:** Kiro (para la especificación) y OpenCode (como agente de codificación en terminal).  
+**Herramientas utilizadas:** Kiro (especificación) y OpenCode (agente de codificación en terminal).  
 **Propósito:** Diseñar, generar y validar una vista materializada (`mv_facturacion_categoria_mes`) para optimizar un reporte agregado costoso de facturación por categoría de producto y mes sobre el esquema real de Food Store, incorporando un índice único para permitir actualizaciones concurrentes sin bloqueo.
 
 ---
 
-## 1. Especificación utilizada en Kiro (Prompt / Spec)
+### Interacción 1 — Spec de `vista_materializada_facturacion_categoria_mes`
 
-```markdown
-# spec: vista_materializada_facturacion_categoria_mes
+- **Prompt/spec entregado a la IA:**
+  ```markdown
+  # spec: vista_materializada_facturacion_categoria_mes
 
-- **Objetivo:** Optimizar un reporte agregado costoso de facturación por categoría de producto y mes sobre el esquema real de Food Store, reduciendo el tiempo de respuesta frente a consultas analíticas.
-- **Consulta afectada:** Agregación de ventas uniendo `pedido`, `detalle_pedido`, `producto` y `categoria` agrupando por `DATE_TRUNC('month', fecha_pedido)` e `id_categoria`.
-- **Columnas candidatas para índice único:** `id_categoria` y `mes`.
-- **Criterio de aceptación:** Reducir drásticamente el tiempo de ejecución en comparación con la consulta en caliente sobre tablas base, permitiendo además la actualización concurrente (`REFRESH MATERIALIZED VIEW CONCURRENTLY`) gracias al índice único.
-## 2. Propuesta generada por OpenCode
-- OpenCode generó el bloque de código SQL adaptado estrictamente a las tablas de nuestro esquema (pedido, detalle_pedido, producto, categoria), utilizando DATE_TRUNC para los meses, las funciones COUNT(DISTINCT ...) y SUM para los montos, acompañado del índice único correspondiente:
-CREATE MATERIALIZED VIEW mv_facturacion_categoria_mes AS
-SELECT 
-    c.id_categoria AS categoria_id,
-    c.nombre AS categoria_nombre,
-    DATE_TRUNC('month', p.fecha_pedido) AS mes,
-    COUNT(DISTINCT p.id_pedido) AS total_pedidos,
-    SUM(dp.cantidad) AS total_unidades_vendidas,
-    SUM(dp.cantidad * dp.precio_unitario_facturado) AS facturacion_total
-FROM 
-    pedido p
-JOIN 
-    detalle_pedido dp ON p.id_pedido = dp.id_pedido
-JOIN 
-    producto pr ON dp.id_producto = pr.id_producto
-JOIN 
-    categoria c ON pr.id_categoria = c.id_categoria
-GROUP BY 
-    c.id_categoria, c.nombre, DATE_TRUNC('month', p.fecha_pedido)
-WITH DATA;
+  - **Objetivo:** Optimizar un reporte agregado costoso de facturación por categoría de producto y mes sobre el esquema real de Food Store, reduciendo el tiempo de respuesta frente a consultas analíticas.
+  - **Consulta afectada:** Agregación de ventas uniendo `pedido`, `detalle_pedido`, `producto` y `categoria` agrupando por `DATE_TRUNC('month', fecha_pedido)` e `id_categoria`.
+  - **Columnas candidatas para índice único:** `id_categoria` y `mes`.
+  - **Criterio de aceptación:** Reducir drásticamente el tiempo de ejecución en comparación con la consulta en caliente sobre tablas base, permitiendo además la actualización concurrente (`REFRESH MATERIALIZED VIEW CONCURRENTLY`) gracias al índice único.
+  ```
+- **Propuesta de la IA:** bloque SQL adaptado estrictamente a las tablas del esquema
+  (`pedido`, `detalle_pedido`, `producto`, `categoria`), con `DATE_TRUNC` para los meses,
+  `COUNT(DISTINCT ...)` y `SUM` para los montos, acompañado del índice único correspondiente:
+  ```sql
+  CREATE MATERIALIZED VIEW mv_facturacion_categoria_mes AS
+  SELECT
+      c.id_categoria AS categoria_id,
+      c.nombre AS categoria_nombre,
+      DATE_TRUNC('month', p.fecha_pedido) AS mes,
+      COUNT(DISTINCT p.id_pedido) AS total_pedidos,
+      SUM(dp.cantidad) AS total_unidades_vendidas,
+      SUM(dp.cantidad * dp.precio_unitario_facturado) AS facturacion_total
+  FROM pedido p
+  JOIN detalle_pedido dp ON p.id_pedido = dp.id_pedido
+  JOIN producto pr ON dp.id_producto = pr.id_producto
+  JOIN categoria c ON pr.id_categoria = c.id_categoria
+  GROUP BY c.id_categoria, c.nombre, DATE_TRUNC('month', p.fecha_pedido)
+  WITH DATA;
 
-CREATE UNIQUE INDEX idx_mv_facturacion_cat_mes_unq 
-ON mv_facturacion_categoria_mes (categoria_id, mes);
-
-## 3. Validación, Modificaciones y Decisión Técnica
-  - **Revisión línea por línea**: Se verificó que los nombres de las claves foráneas y columnas (id_pedido, id_producto, id_categoria, fecha_pedido, precio_unitario_facturado) coincidieran exactamente con el schema.sql del repositorio.
-
-  - **Aceptación**: Se aceptó la propuesta de la IA porque cumple con la estructura requerida, incluye el parámetro WITH DATA para poblar la vista desde el inicio y genera el índice único con la combinación exacta de columnas (categoria_id, mes), lo cual habilita el comando REFRESH MATERIALIZED VIEW CONCURRENTLY sin bloquear las lecturas del sistema.
-
-  - **Prueba de equivalencia**: Se contrastaron los resultados arrojados por un SELECT * FROM mv_facturacion_categoria_mes frente a la consulta analítica sin materializar de la Semana 4, comprobando que los totales de facturación y unidades coinciden de forma exacta.
+  CREATE UNIQUE INDEX idx_mv_facturacion_cat_mes_unq
+      ON mv_facturacion_categoria_mes (categoria_id, mes);
+  ```
+- **Validación línea por línea:** se verificó que los nombres de las claves foráneas y
+  columnas (`id_pedido`, `id_producto`, `id_categoria`, `fecha_pedido`,
+  `precio_unitario_facturado`) coincidieran exactamente con el `schema.sql` del repositorio.
+- **Aceptado:** sí. Cumple la estructura requerida, incluye `WITH DATA` para poblar la vista
+  desde el inicio y genera el índice único con la combinación exacta `(categoria_id, mes)`,
+  lo cual habilita `REFRESH MATERIALIZED VIEW CONCURRENTLY` sin bloquear las lecturas del
+  sistema.
+- **Prueba de equivalencia:** se contrastaron los resultados de
+  `SELECT * FROM mv_facturacion_categoria_mes` contra la consulta analítica sin materializar
+  de la Semana 4 (EXCEPT bidireccional): los totales de facturación y unidades coinciden de
+  forma exacta (0 filas).
+- **Modificado:** se incorporaron los bloques `EXCEPT` y el módulo de medición
+  `EXPLAIN (ANALYZE, BUFFERS, TIMING)` al script.
+- **Descartado:** nada en esta interacción.
 
 ### Interacción 2 — Completado de la Parte C (entregables finales)
 

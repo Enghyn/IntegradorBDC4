@@ -1,7 +1,7 @@
 # Spec: vista_detalle_pedido_producto
 
-**Archivo afectado:** `food_store/views.sql`
-**Base de datos:** `food_store` (PostgreSQL)
+**Archivo afectado:** `TP5/views.sql`
+**Base de datos:** `tp_food_store` (PostgreSQL)
 **Fecha:** 2026-09
 **Estado:** Propuesta
 

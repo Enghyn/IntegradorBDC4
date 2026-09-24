@@ -1,6 +1,6 @@
 ﻿# SPEC-003 — Optimización de la Consulta de Pedidos con Volumen y Monto Elevado
 
-**Archivo afectado:** `food_store/queries.sql` (Consulta 1 / 3.3)
+**Archivo afectado:** `TP5/queries.sql` (Consulta 1 / 3.3)
 **Base de datos:** `tp_food_store` (PostgreSQL)
 **Fecha:** 2025-07
 **Estado:** Propuesta
@@ -41,7 +41,7 @@ LIMIT 20;
 | Parámetro                       | Valor                                    |
 |---------------------------------|------------------------------------------|
 | Motor                           | PostgreSQL                               |
-| Base de datos                   | `tp_food_store`                          |
+| Base de datos                   | `tp_food_store`                         |
 | Volumen — `cliente`             | 20.000 filas                             |
 | Volumen — `pedido`              | 200.000 filas                            |
 | Volumen — `detalle_pedido`      | ~700.000 filas                           |
@@ -301,14 +301,34 @@ CREATE INDEX IF NOT EXISTS idx_pedido_id_cliente
     ON pedido (id_cliente);
 ```
 
-> Estos objetos deben definirse en `food_store/indices.sql`, **no** en `schema.sql`
+> Estos objetos deben definirse en `TP5/indices.sql`, **no** en `schema.sql`
 > ni en `queries.sql`. Dado que `idx_detalle_pedido_id_pedido` ya fue propuesto por SPEC-001
 > y `idx_pedido_cliente` ya existe en `schema.sql`, las cláusulas `IF NOT EXISTS` garantizan
 > idempotencia en todos los entornos.
 
 ---
 
-## 10. Fuera de alcance
+## 10. Cobertura adicional — índice de búsqueda por producto (Objeto 4 de `indices.sql`)
+
+El workload de `TP5/queries.sql` incluye además una consulta puntual de negocio
+(`Consulta Nueva 2: WHERE id_producto = n`) que no puede usar la PK compuesta
+`(id_pedido, id_producto)` porque `id_producto` es la **segunda** columna del árbol.
+Para ese patrón se crea:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id_producto
+    ON detalle_pedido (id_producto);
+```
+
+- **Evidencia (queries.sql, Consulta Nueva 2):** el plan pasa de
+  `Parallel Seq Scan on detalle_pedido` (57.378 ms) a
+  `Index Scan using idx_detalle_pedido_id_producto` (0.157 ms).
+- **Justificación del descarte implícito:** no se propone también `(id_producto, cantidad)`
+  ni índices sobre las columnas de agregación ya descartadas en la sección 7.
+
+---
+
+## 11. Fuera de alcance
 
 - Modificación de las tablas base (`ALTER TABLE`).
 - Creación de vistas materializadas o tablas de resumen.

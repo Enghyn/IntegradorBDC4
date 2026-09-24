@@ -10,7 +10,8 @@
 --   3. EXPLAIN ANALYZE baseline: mediciones de rendimiento sobre tp_food_store
 --      (10 categorías, 20k clientes, 50k productos, 200k pedidos, ~700k detalles)
 --
--- Base de datos: food_store (PostgreSQL)
+-- Base de datos: tp_food_store (PostgreSQL 16+) — SOLO copia local de
+--                trabajo. NUNCA producción.
 -- Nota: este archivo NO modifica el modelo de datos. Los CREATE INDEX / CREATE VIEW
 --       de la entrega se definen por separado (objetos de la semana).
 -- ============================================================================
@@ -285,7 +286,10 @@ ORDER BY p.precio_lista DESC;
 -- EXPLAIN ANALYZE - Consultas de rendimiento sobre tp_food_store (masiva)
 -- Archivo actualizado: Incluye la consulta que SÍ usa índice por diseño original
 -- y dos consultas nuevas donde los índices son altamente selectivos y decisivos.
--- Base: tp_food_store (10 cat, 20k clientes, 50k productos, 200k pedidos, 700k detalles)
+-- Base: tp_food_store (10 cat, 20k clientes, 50k productos, 200k pedidos,
+--        ~700k-900k detalles)
+-- NOTA: las corridas embebidas corresponden a snapshots previos de desarrollo;
+--       informe_mediciones.md declara el dataset exacto de cada medición.
 -- ============================================================================
 
 -- ============================================================================
@@ -377,9 +381,10 @@ WHERE id_producto = 2;
 
 
 -- ============================================================================
--- APLICACIÓN DE ÍNDICES ESPECÍFICOS:
--- CREATE INDEX idx_detalle_pedido_id_pedido ON detalle_pedido (id_pedido);
--- CREATE INDEX idx_detalle_pedido_id_producto ON detalle_pedido (id_producto);
+-- APLICACIÓN DE ÍNDICES ESPECÍFICOS (creados en TP5/indices.sql):
+--   CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id_pedido   ON detalle_pedido (id_pedido);
+--   CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id_producto ON detalle_pedido (id_producto);
+-- Los planes POST-ÍNDICE de abajo son los esperados con ambos objetos creados.
 -- ============================================================================
 
 

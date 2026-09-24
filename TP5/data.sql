@@ -1,6 +1,6 @@
 -- ============================================================================
 -- SCRIPT: Carga de Categorías, Clientes, Productos y Pedidos
--- Archivo: db/seeds/carga_datos.sql
+-- Archivo: TP5/data.sql (Parte 1 — carga_datos)
 -- Base de datos: tp_food_store (puerto 5433)
 --
 -- Genera:
@@ -9,8 +9,8 @@
 -- 3. 50.000 productos distribuidos equitativamente entre categorías
 -- 4. 200.000 pedidos asociados a clientes
 --
--- Dependencias: esquema creado por db/schema.sql + respaldo respaldo.dump
--- Post-ejecución: correr carga_detalle_pedido.sql
+-- Dependencias: esquema creado por TP5/schema.sql + respaldo respaldo.dump
+-- Post-ejecución: correr la Parte 2 de este archivo (carga de detalle_pedido)
 -- ============================================================================
 
 SET client_encoding = 'UTF8';
@@ -108,7 +108,7 @@ END $$;
 
 -- ============================================================================
 -- SCRIPT: Carga de Detalles de Pedido
--- Archivo: db/seeds/carga_detalle_pedido.sql
+-- Archivo: TP5/data.sql (Parte 2 — carga_detalle_pedido)
 -- Base de datos: tp_food_store (puerto 5433)
 --
 -- Genera:
@@ -116,7 +116,7 @@ END $$;
 -- 2. Cantidad aleatoria entre 1 y 10 por línea
 -- 3. Precio unitario facturado = precio_lista actual del producto
 --
--- Dependencias: carga_datos.sql ejecutado exitosamente
+-- Dependencias: Parte 1 de este archivo ejecutada exitosamente
 --               (necesita tablas cliente, producto, pedido con datos)
 -- Post-ejecución: ANALYZE ya incluido en este script
 -- ============================================================================

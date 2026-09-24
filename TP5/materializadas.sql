@@ -1,7 +1,7 @@
 -- ============================================================================
 -- MATERIALIZADAS.SQL — VISTA MATERIALIZADA DE FACTURACIÓN (Parte C — TP Semana 5)
--- Base de datos: tp_food_store (PostgreSQL) — SOLO sobre la copia local de
---                trabajo (tp_food_store o tp_food_store_local). NUNCA producción.
+-- Base de datos: tp_food_store (PostgreSQL 16+) — SOLO sobre la copia
+--                local de trabajo. NUNCA producción.
 --
 -- Contenido:
 --   1. mv_facturacion_categoria_mes (spec: specs/vista_materializada_facturacion_categoria_mes.md)
@@ -154,7 +154,7 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY mv_facturacion_categoria_mes;
 --   sin plan (utility statement); ~10 s, 70 filas actualizadas (DBeaver)
 
 -- ============================================================================
--- RESULTADOS DE VERIFICACIÓN (medidos sobre tp_food_store local, 2026-09-24)
+-- RESULTADOS DE VERIFICACIÓN (medidos sobre tp_food_store, 2026-09-24)
 --   EXCEPT MV <-> consulta manual : 0 filas  (esperado 0) ✅
 --   Execution Time original      : 2797.623 ms   (Planning 0.855 ms)
 --   Execution Time MV            : 0.042 ms      (Planning 0.078 ms)

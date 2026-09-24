@@ -5,31 +5,40 @@
 --           Categoría (SPEC-002)
 --           Consulta 3.3 — Pedidos con más de 3 productos y monto total
 --           > $5000 (SPEC-003)
--- Base de datos: tp_food_store (PostgreSQL)
+--           Lookups puntuales de queries.sql (Consulta Nueva 2 por id_producto)
+-- Base de datos: tp_food_store (PostgreSQL 16+) — SOLO copia local de
+--                trabajo. NUNCA producción.
 --
--- Fuente: food_store/specs/indice_top_clientes_gasto.md,
---         food_store/specs/indice_productos_rango_precio.md,
---         food_store/specs/indice_pedidos_monto_volumen.md
+-- Fuente: TP5/specs/indice_top_clientes_gasto.md,
+--         TP5/specs/indice_productos_rango_precio.md,
+--         TP5/specs/indice_pedidos_monto_volumen.md
 -- Restricción: NO modifica el modelo de datos (sin ALTER TABLE, DROP ni
 --              cambios de tipo). Los objetos de esta entrega se definen
 --              aquí, no en schema.sql ni en queries.sql.
+-- Estado de SPEC-001: el índice parcial idx_cliente_activo fue DESCARTADO tras
+--              medición (ver bloque DESCARTADO más abajo); solo se crea el
+--              índice idx_detalle_pedido_id_pedido de esa especificación.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- Objeto 1: Índice parcial sobre cliente para el filtro WHERE activo = TRUE
--- Tipo: B-tree parcial (condición del índice: activo = TRUE)
--- Columnas: id_cliente
--- Justificación: permite al planificador usar un Index Scan al aplicar el
---                filtro, evitando el Seq Scan sobre las 20 000 filas de
---                cliente. La condición activo = TRUE es el predicado del
---                índice parcial, no una columna del índice.
+-- DESCARTADO tras medición (SPEC-001, Índice 1): Índice parcial sobre cliente
+-- para el filtro WHERE activo = TRUE.
+-- Tipo propuesto: B-tree parcial (condición del índice: activo = TRUE)
+-- Columnas propuestas: id_cliente
+-- Resultado de la medición (informe_mediciones.md → Consulta 3.1, sección 5):
+--   el plan NO cambió (sigue Seq Scan sobre cliente) y el tiempo pasó de
+--   3612.970 ms a 3478.948 ms (~3.7%, dentro del ruido). El costo real es la
+--   agregación top-N sobre ~700k filas de detalle_pedido, no el filtro por
+--   activo de una tabla de 20 000 filas.
+-- MOTIVO: criterio de sobreindexación del TP — overhead de escritura sin
+--         beneficio medible. NO se crea.
 -- ----------------------------------------------------------------------------
-CREATE INDEX idx_cliente_activo
-    ON cliente (id_cliente)
-    WHERE activo = TRUE;
+-- CREATE INDEX idx_cliente_activo
+--     ON cliente (id_cliente)
+--     WHERE activo = TRUE;
 
 -- ----------------------------------------------------------------------------
--- Objeto 2: Índice dedicado en detalle_pedido para agilizar el JOIN por id_pedido
+-- Objeto 1: Índice dedicado en detalle_pedido para agilizar el JOIN por id_pedido
 -- Tipo: B-tree simple (una sola columna: sin orden compuesto)
 -- Columnas: id_pedido
 -- Justificación: desambigua el acceso por id_pedido respecto a la PK compuesta
@@ -42,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id_pedido
     ON detalle_pedido (id_pedido);
 
 -- ----------------------------------------------------------------------------
--- Objeto 3: Índice compuesto parcial sobre producto para optimizar la subconsulta
+-- Objeto 2: Índice compuesto parcial sobre producto para optimizar la subconsulta
 --           correlacionada de precio promedio por categoría (SPEC-002)
 -- Tipo: B-tree compuesto parcial (columnas: id_categoria, precio_lista;
 --        condición del índice: activo = TRUE)
@@ -58,7 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_producto_categoria_precio
     WHERE activo = TRUE;
 
 -- ----------------------------------------------------------------------------
--- Objeto 4: Índice dedicado en pedido para agilizar el JOIN por id_cliente (SPEC-003)
+-- Objeto 3: Índice dedicado en pedido para agilizar el JOIN por id_cliente (SPEC-003)
 -- Tipo: B-tree simple (una sola columna)
 -- Columnas: id_cliente
 -- Justificación: formaliza el acceso por FK id_cliente habilitando Nested Loop
@@ -70,3 +79,18 @@ CREATE INDEX IF NOT EXISTS idx_producto_categoria_precio
 -- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_pedido_id_cliente
     ON pedido (id_cliente);
+
+-- ----------------------------------------------------------------------------
+-- Objeto 4: Índice dedicado en detalle_pedido para la búsqueda por producto
+--           (workload de queries.sql — Consulta Nueva 2: WHERE id_producto = n)
+-- Tipo: B-tree simple (una sola columna)
+-- Columnas: id_producto
+-- Justificación: id_producto es la SEGUNDA columna de la PK compuesta
+--                (id_pedido, id_producto), por lo que la PK no puede usarse en
+--                búsquedas por producto sin saber el id_pedido asociado. El
+--                índice dedicado convierte el Parallel Seq Scan sobre ~900k
+--                filas en un Index Scan puntual (workload de queries.sql:
+--                Consulta Nueva 2: 57.378 ms → 0.157 ms).
+-- ----------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_detalle_pedido_id_producto
+    ON detalle_pedido (id_producto);

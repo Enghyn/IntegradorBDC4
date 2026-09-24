@@ -1,6 +1,6 @@
 -- ============================================================================
 -- VIEWS.SQL — VISTAS DEL SISTEMA (Parte B — TP Unidad 3, Semana 5)
--- Base de datos: tp_food_store_local (PostgreSQL)
+-- Base de datos: tp_food_store (PostgreSQL)
 --
 -- Contenido:
 --   1. vista_productos_vigentes_categoria  (spec: specs/vista_productos_vigentes_categoria.md)
@@ -151,8 +151,8 @@ EXCEPT
 );
 
 -- ============================================================================
--- RESULTADOS DE VERIFICACIÓN (completar tras ejecutar)
---   Vista 1 (productos vigentes):          EXCEPT A<->B = __ filas  (esperado 0)
---   Vista 2 (pedidos usuario):             EXCEPT A<->B = __ filas  (esperado 0)
---   Vista 3 (detalle pedido producto):     EXCEPT A<->B = __ filas  (esperado 0)
+-- RESULTADOS DE VERIFICACIÓN (completado — corrida 2026-09-24 sobre tp_food_store)
+--   Vista 1 (productos vigentes):          EXCEPT A<->B = 0 filas  (esperado 0) OK
+--   Vista 2 (pedidos usuario):             EXCEPT A<->B = 0 filas  (esperado 0) OK
+--   Vista 3 (detalle pedido producto):     EXCEPT A<->B = 0 filas  (esperado 0) OK
 -- ============================================================================
