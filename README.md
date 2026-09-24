@@ -77,6 +77,8 @@ Todo el material del TP está organizado dentro de la carpeta `food_store/`:
 | `food_store/specs/` | Especificaciones técnicas por feature: diseño de las vistas e índices propuestos. |
 | `food_store/DUIA.md` | Bitácora de uso de IA durante el desarrollo del TP. |
 | `food_store/views.sql` | Creación de las vistas estándar (`vista_productos_vigentes_categoria`, `vista_pedidos_usuario`, `vista_detalle_pedido_producto`) y su verificación de equivalencia con `EXCEPT`. |
+| `TP5/materializadas.sql` | Vista materializada de facturación por categoría y mes (`mv_facturacion_categoria_mes`, creada con `WITH DATA`) + índice único `(categoria_id, mes)` que habilita `REFRESH CONCURRENTLY` + verificación `EXCEPT` + módulo de medición (Parte C). |
+| `TP5/specs/vista_materializada_facturacion_categoria_mes.md` | Especificación técnica de la vista materializada: objetivo, columnas, decisiones de diseño y criterios de aceptación. |
 
 ---
 
@@ -154,6 +156,37 @@ La idea es comparar el `Execution Time` del `INSERT ... SELECT` con y sin el ín
 ### 6. (Opcional) Verificar equivalencia de consultas con `EXCEPT`
 
 En `food_store/queries.sql` incluimos las verificaciones de equivalencia con `EXCEPT` bidireccional entre dos versiones de cada consulta analítica (una generada con IA y otra resuelta con CTE / funciones de ventana). A diferencia del `EXCEPT` de las vistas (paso 1), acá se valida que las dos implementaciones de las consultas 3.1 y 3.2 devuelvan el mismo resultado: si ambas versiones coinciden, ambos `EXCEPT` devuelven **0 filas**, lo que confirma que las reescrituras son equivalentes.
+
+### 7. Vista materializada (Parte C)
+
+**Qué es y por qué existe.** El reporte de **facturación por categoría de producto y mes** es el agregado más costoso del sistema: para responderlo el motor debe recorrer la totalidad de las ~700.000 líneas de `detalle_pedido`, unirlas con `pedido`, `producto` y `categoria`, y agregar todo por categoría y mes — sin ningún filtro que recorte las filas a procesar. Una **vista materializada** precomputa ese agregado y lo persiste como una tabla física, de modo que la consulta deja de pagar el costo del join y la agregación en caliente.
+
+**Objetos creados** (archivo `TP5/materializadas.sql`):
+
+- `mv_facturacion_categoria_mes` — vista materializada creada con **`WITH DATA`** (poblada al momento de la creación). Columnas: `categoria_id`, `categoria_nombre`, `mes`, `total_pedidos`, `total_unidades_vendidas`, `facturacion_total`.
+- `idx_mv_facturacion_cat_mes_unq` — **índice único** sobre `(categoria_id, mes)`. Es el requisito de PostgreSQL para poder ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY` a futuro.
+- Verificación de equivalencia con `EXCEPT` bidireccional contra la consulta original sin materializar (ambos sentidos deben devolver **0 filas**).
+
+**Cómo crearla:** ejecutá `TP5/materializadas.sql` sobre `tp_food_store`. El script incluye un `DROP MATERIALIZED VIEW IF EXISTS` inicial (las vistas materializadas no soportan `CREATE OR REPLACE` en PostgreSQL), por lo que se puede re-ejecutar sin errores.
+
+**Cómo reproducir las mediciones:** al final del mismo script están los bloques `EXPLAIN (ANALYZE, BUFFERS, TIMING)`:
+
+- **Bloque A** — consulta original sin materializar (baseline).
+- **Bloque B** — `SELECT` desde la vista materializada.
+- **Bloque C** — `REFRESH MATERIALIZED VIEW CONCURRENTLY`. *Nota:* el refresh es una *utility statement*, por lo que PostgreSQL no genera plan de ejecución; el tiempo se toma de la estadística de ejecución de DBeaver (Execute time).
+
+**Resultados reales** (medidos el 2026-09-24 sobre la base local con datos masivos):
+
+| Medición | Tiempo |
+|---|---|
+| Consulta original (sin materializar) | `2797.623 ms` |
+| `SELECT` desde `mv_facturacion_categoria_mes` | `0.042 ms` |
+| `REFRESH MATERIALIZED VIEW CONCURRENTLY` | ~10 s (70 filas actualizadas) |
+| **Mejora original → MV** | **≈ 66.600×** (~4 órdenes de magnitud) |
+
+**Frecuencia de refresco recomendada:** `REFRESH MATERIALIZED VIEW CONCURRENTLY` con frecuencia **diaria (nocturna, p. ej. 03:00)** programado por un job externo (cron / pg_cron). Justificación: las celdas de meses ya cerrados no cambian (histórico de facturación), solo se actualiza la celda del mes en curso; el costo del refresh (~10 s) se paga una sola vez fuera de horario pico; y `CONCURRENTLY` permite actualizar el snapshot **sin bloquear las lecturas** del reporte.
+
+**Implicancia para los usuarios (consistencia):** la vista materializada es un **snapshot**, no las tablas base. Entre un refresco y el siguiente, los pedidos ingresados después no aparecen hasta la próxima corrida: el dato puede estar desactualizado hasta 24 h (retraso máximo = frecuencia del refresh). Para meses cerrados esto es irrelevante; solo afecta la celda del mes corriente. Si una decisión exige el dato exacto al minuto, debe consultarse la consulta original sobre tablas base (con su costo) o reducir la frecuencia de refresh. El detalle completo de esta sección está en `TP5/informe_mediciones.md` → Parte C.
 
 ---
 
