@@ -1,0 +1,428 @@
+﻿-- ============================================================================
+--  TRABAJO PR├üCTICO - UNIDAD 4
+--  Parte 1: Forma Normal de Boyce-Codd (FNBC) sobre ControlLoteAlmacen
+--  Proyecto: Food Store (extensi├│n mayorista: dep├│sitos y control de lotes)
+--  Motor: PostgreSQL 17
+--
+--  Contenido
+--    0. Tablas maestras m├¡nimas (para que el script sea aut├│nomo)
+--    1. Esquema original del enunciado + instancia de ejemplo
+--    2. Dependencias funcionales y claves candidatas (verificaci├│n SQL)
+--    3. Anomal├¡as habilitadas por la violaci├│n de FNBC
+--    4. Descomposici├│n sin p├®rdida (algoritmo) + DDL de las tablas resultantes
+--    5. Migraci├│n de datos, vista de compatibilidad y verificaci├│n
+--
+--  El script es idempotente: puede reejecutarse sobre la misma base.
+--  En la base Food Store real las tablas maestras lote / deposito / usuario ya
+--  existen; ac├í se crean en versi├│n m├¡nima s├│lo para que el TP se pueda
+--  reproducir de forma aut├│noma en una base limpia.
+-- ============================================================================
+-- ----------------------------------------------------------------------------
+-- 0. TABLAS MAESTRAS M├ìNIMAS (referenciadas por el esquema del enunciado)
+-- ----------------------------------------------------------------------------
+DROP VIEW  IF EXISTS control_lote_almacen_v;
+psql.exe : psql:tp_fnbc_control_lote.sql:24: NOTICE:  view "control_lote_almacen_v" does not exist, skipping
+En línea: 1 Carácter: 234
++ ... te0;" 2>&1; & $psql -h 127.0.0.1 -p 55432 -U postgres -d food_store_t ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (psql:tp_fnbc_co...exist, skipping:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+DROP VIEW
+DROP TABLE IF EXISTS control_lote_almacen      CASCADE;
+psql:tp_fnbc_control_lote.sql:25: NOTICE:  table "control_lote_almacen" does not exist, skipping
+DROP TABLE
+DROP TABLE IF EXISTS control_lote_almacen_orig CASCADE;
+psql:tp_fnbc_control_lote.sql:26: NOTICE:  table "control_lote_almacen_orig" does not exist, skipping
+DROP TABLE
+DROP TABLE IF EXISTS control_lote_responsable  CASCADE;
+psql:tp_fnbc_control_lote.sql:27: NOTICE:  table "control_lote_responsable" does not exist, skipping
+DROP TABLE
+DROP TABLE IF EXISTS responsable_deposito      CASCADE;
+psql:tp_fnbc_control_lote.sql:28: NOTICE:  table "responsable_deposito" does not exist, skipping
+DROP TABLE
+DROP TABLE IF EXISTS lote                      CASCADE;
+psql:tp_fnbc_control_lote.sql:29: NOTICE:  table "lote" does not exist, skipping
+DROP TABLE
+DROP TABLE IF EXISTS deposito                  CASCADE;
+psql:tp_fnbc_control_lote.sql:30: NOTICE:  table "deposito" does not exist, skipping
+DROP TABLE
+DROP TABLE IF EXISTS usuario                   CASCADE;
+psql:tp_fnbc_control_lote.sql:31: NOTICE:  table "usuario" does not exist, skipping
+DROP TABLE
+CREATE TABLE lote (
+    id        BIGINT PRIMARY KEY,
+    codigo    VARCHAR(30) NOT NULL UNIQUE,
+    descripcion VARCHAR(200)
+);
+CREATE TABLE
+CREATE TABLE deposito (
+    id        BIGINT PRIMARY KEY,
+    nombre    VARCHAR(100) NOT NULL,
+    direccion VARCHAR(200)
+);
+CREATE TABLE
+CREATE TABLE usuario (
+    id        BIGINT PRIMARY KEY,
+    nombre    VARCHAR(150) NOT NULL,
+    rol       VARCHAR(50)  NOT NULL DEFAULT 'CONTROL_CALIDAD'
+);
+CREATE TABLE
+INSERT INTO deposito (id, nombre, direccion) VALUES
+    (30, 'Dep├│sito Central',   'Av. Industrial 1200'),
+    (31, 'Dep├│sito Norte',     'Ruta 9 Km 12'),
+    (32, 'Dep├│sito Sur',       'Calle 40 N┬░ 850');
+INSERT 0 3
+INSERT INTO lote (id, codigo, descripcion) VALUES
+    (501, 'L-2026-0501', 'Lote de l├ícteos'),
+    (502, 'L-2026-0502', 'Lote de bebidas'),
+    (503, 'L-2026-0503', 'Lote de congelados');
+INSERT 0 3
+INSERT INTO usuario (id, nombre, rol) VALUES
+    (801, 'Mar├¡a G├│mez',  'CONTROL_CALIDAD'),
+    (802, 'Juli├ín P├®rez', 'CONTROL_CALIDAD'),
+    (803, 'Luc├¡a Sosa',   'CONTROL_CALIDAD');
+INSERT 0 3
+-- ----------------------------------------------------------------------------
+-- 1. ESQUEMA ORIGINAL DEL ENUNCIADO + INSTANCIA DE EJEMPLO
+--    Regla de negocio relevada en log├¡stica:
+--      - Para un (lote, dep├│sito) dado, el responsable de control es ├║nico.
+--      - Cada responsable pertenece a un ├║nico dep├│sito.
+-- ----------------------------------------------------------------------------
+CREATE TABLE control_lote_almacen (
+    lote_id                BIGINT NOT NULL REFERENCES lote(id),
+    deposito_id            BIGINT NOT NULL REFERENCES deposito(id),
+    responsable_control_id BIGINT NOT NULL REFERENCES usuario(id),
+    PRIMARY KEY (lote_id, deposito_id)
+);
+CREATE TABLE
+INSERT INTO control_lote_almacen VALUES
+    (501, 30, 801),
+    (502, 30, 801),
+    (503, 31, 802);
+INSERT 0 3
+-- Copia de seguridad de la instancia original: se usa al final para verificar
+-- que la descomposici├│n reconstruye exactamente la misma relaci├│n.
+CREATE TABLE control_lote_almacen_orig AS
+SELECT lote_id, deposito_id, responsable_control_id
+FROM control_lote_almacen;
+SELECT 3
+-- ----------------------------------------------------------------------------
+-- 2. DEPENDENCIAS FUNCIONALES Y CLAVES CANDIDATAS
+-- ----------------------------------------------------------------------------
+-- Con L = LoteID, D = DepositoID, R = ResponsableControlID:
+--
+--   DF1 : (L, D) -> R        (un responsable por lote y dep├│sito)
+--   DF2 : R -> D             (un responsable pertenece a un solo dep├│sito)
+--
+-- El conjunto F = { (L,D) -> R , R -> D } tiene dos claves candidatas:
+--   * (L, D)   porque (L,D)+ = {L,D,R} y ni L+ ni D+ alcanzan todos los atributos
+--   * (L, R)   porque (L,R)+ = {L,R,D} y ni L+ ni R+ alcanzan todos los atributos
+-- Todos los atributos son primos; no hay atributos no primos.
+-- 2.1 Verificaci├│n sobre la instancia de ejemplo: (L,D) es ├║nico
+SELECT 'PK (lote, deposito) unica' AS verificacion,
+       CASE WHEN COUNT(*) = 0 THEN 'OK' ELSE 'FALLA' END AS resultado
+FROM (
+    SELECT lote_id, deposito_id
+    FROM control_lote_almacen
+    GROUP BY lote_id, deposito_id
+    HAVING COUNT(*) > 1
+) duplicados;
+       verificacion        | resultado 
+---------------------------+-----------
+ PK (lote, deposito) unica | OK
+(1 fila)
+
+-- 2.2 Verificaci├│n: (L,R) tambi├®n es ├║nico (consecuencia de R -> D)
+SELECT 'clave candidata (lote, responsable) unica' AS verificacion,
+       CASE WHEN COUNT(*) = 0 THEN 'OK' ELSE 'FALLA' END AS resultado
+FROM (
+    SELECT lote_id, responsable_control_id
+    FROM control_lote_almacen
+    GROUP BY lote_id, responsable_control_id
+    HAVING COUNT(*) > 1
+) duplicados;
+               verificacion                | resultado 
+-------------------------------------------+-----------
+ clave candidata (lote, responsable) unica | OK
+(1 fila)
+
+-- 2.3 Verificaci├│n: R no es clave (801 aparece en dos filas) y D tampoco lo es.
+SELECT 'R no es superclave (801 se repite)' AS verificacion,
+       CASE WHEN COUNT(*) > 1 THEN 'OK: R no es clave' ELSE 'FALLA' END AS resultado
+FROM control_lote_almacen
+WHERE responsable_control_id = 801;
+            verificacion            |     resultado     
+------------------------------------+-------------------
+ R no es superclave (801 se repite) | OK: R no es clave
+(1 fila)
+
+SELECT 'D no es superclave (30 se repite)' AS verificacion,
+       CASE WHEN COUNT(*) > 1 THEN 'OK: D no es clave' ELSE 'FALLA' END AS resultado
+FROM control_lote_almacen
+WHERE deposito_id = 30;
+           verificacion            |     resultado     
+-----------------------------------+-------------------
+ D no es superclave (30 se repite) | OK: D no es clave
+(1 fila)
+
+-- 2.4 Verificaci├│n: la instancia respeta R -> D
+--     (ning├║n responsable asociado a m├ís de un dep├│sito)
+SELECT 'instancia respeta R -> D' AS verificacion,
+       CASE WHEN COUNT(*) = 0 THEN 'OK' ELSE 'FALLA' END AS resultado
+FROM (
+    SELECT responsable_control_id
+    FROM control_lote_almacen
+    GROUP BY responsable_control_id
+    HAVING COUNT(DISTINCT deposito_id) > 1
+) violaciones;
+       verificacion       | resultado 
+--------------------------+-----------
+ instancia respeta R -> D | OK
+(1 fila)
+
+-- ----------------------------------------------------------------------------
+-- 3. ANOMAL├ìAS QUE HABILITA LA VIOLACI├ôN DE FNBC
+--    Cada bloque se ejecuta dentro de una transacci├│n que se revierte, de modo
+--    que la instancia de ejemplo queda intacta.
+-- ----------------------------------------------------------------------------
+-- 3.1 ANOMAL├ìA DE INSERCI├ôN
+--     No existe lugar en el esquema para registrar un dato maestro del
+--     responsable (a qu├® dep├│sito pertenece) sin inventar un lote controlado.
+BEGIN;
+BEGIN
+INSERT INTO lote (id, codigo, descripcion)
+VALUES (504, 'L-2026-0504', 'Lote de nuevo ingreso');
+INSERT 0 1
+-- El alta del dato maestro "el responsable 803 pertenece al dep├│sito 32"
+-- obliga a registrar, adem├ís, un control sobre un lote que todav├¡a no control├│:
+INSERT INTO control_lote_almacen (lote_id, deposito_id, responsable_control_id)
+VALUES (504, 32, 803);   -- hubo que inventar el control del lote 504
+INSERT 0 1
+SELECT 'insercion: se invento el lote 504' AS anomalia,
+       COUNT(*) AS filas_del_responsable_803
+FROM control_lote_almacen
+WHERE responsable_control_id = 803;
+             anomalia              | filas_del_responsable_803 
+-----------------------------------+---------------------------
+ insercion: se invento el lote 504 |                         1
+(1 fila)
+
+ROLLBACK;
+ROLLBACK
+-- 3.2 ANOMAL├ìA DE ACTUALIZACI├ôN
+--     Si el responsable 801 pasa al dep├│sito 31 hay que actualizar TODAS las
+--     filas donde aparece. Actualizar una sola deja a 801 en dos dep├│sitos y
+--     rompe la regla R -> D sin que el motor lo impida.
+BEGIN;
+BEGIN
+UPDATE control_lote_almacen
+   SET deposito_id = 31
+ WHERE lote_id = 501 AND deposito_id = 30;
+UPDATE 1
+SELECT 'actualizacion parcial: 801 quedo en N depositos' AS anomalia,
+       COUNT(DISTINCT deposito_id) AS depositos,
+       STRING_AGG(DISTINCT deposito_id::text, ', ' ORDER BY deposito_id::text) AS cuales
+FROM control_lote_almacen
+WHERE responsable_control_id = 801;
+                    anomalia                     | depositos | cuales 
+-------------------------------------------------+-----------+--------
+ actualizacion parcial: 801 quedo en N depositos |         2 | 30, 31
+(1 fila)
+
+ROLLBACK;
+ROLLBACK
+-- 3.3 ANOMAL├ìA DE BORRADO
+--     Al dar de baja el control del lote 503 en el dep├│sito 31 desaparece el
+--     ├║nico registro que afirmaba que el responsable 802 pertenece al dep├│sito
+--     31: se pierde un dato maestro por borrar un hecho transitorio.
+BEGIN;
+BEGIN
+DELETE FROM control_lote_almacen
+ WHERE lote_id = 503 AND deposito_id = 31;
+DELETE 1
+SELECT 'borrado: filas que afirman que 802 pertenece al deposito 31' AS anomalia,
+       COUNT(*) AS filas
+FROM control_lote_almacen
+WHERE responsable_control_id = 802;
+                          anomalia                           | filas 
+-------------------------------------------------------------+-------
+ borrado: filas que afirman que 802 pertenece al deposito 31 |     0
+(1 fila)
+
+ROLLBACK;
+ROLLBACK
+-- 3.4 La propia definici├│n de FNBC, comprobada con el motor: el esquema acepta
+--     una violaci├│n de R -> D (el determinante R no es superclave).
+BEGIN;
+BEGIN
+INSERT INTO lote (id, codigo, descripcion)
+VALUES (504, 'L-2026-0504', 'Lote de nuevo ingreso');
+INSERT 0 1
+INSERT INTO control_lote_almacen (lote_id, deposito_id, responsable_control_id)
+VALUES (504, 32, 801);   -- 801 ya pertenec├¡a al dep├│sito 30 seg├║n (501,30,801)
+INSERT 0 1
+SELECT 'FNBC violada: 801 en dos depositos' AS comprobacion,
+       COUNT(DISTINCT deposito_id) AS depositos
+FROM control_lote_almacen
+WHERE responsable_control_id = 801;
+            comprobacion            | depositos 
+------------------------------------+-----------
+ FNBC violada: 801 en dos depositos |         2
+(1 fila)
+
+ROLLBACK;
+ROLLBACK
+-- ----------------------------------------------------------------------------
+-- 4. DESCOMPOSICI├ôN SIN P├ëRDIDA
+--    La DF violatoria es R -> D, con determinante R que no es superclave.
+--    Algoritmo de descomposici├│n:
+--      R1 = R+ = {R, D}                 -> responsable_deposito
+--      R2 = U - (R+ - R) = {L, R}       -> control_lote_responsable
+--    El atributo com├║n es R (responsable_control_id).
+-- ----------------------------------------------------------------------------
+CREATE TABLE responsable_deposito (
+    responsable_control_id BIGINT PRIMARY KEY
+        REFERENCES usuario(id),
+    deposito_id            BIGINT NOT NULL
+        REFERENCES deposito(id)
+);
+CREATE TABLE
+CREATE TABLE control_lote_responsable (
+    lote_id                BIGINT NOT NULL
+        REFERENCES lote(id),
+    responsable_control_id BIGINT NOT NULL
+        REFERENCES responsable_deposito(responsable_control_id),
+    PRIMARY KEY (lote_id, responsable_control_id)
+);
+CREATE TABLE
+-- ----------------------------------------------------------------------------
+-- 5. MIGRACI├ôN Y VERIFICACI├ôN
+-- ----------------------------------------------------------------------------
+-- 5.1 Migraci├│n de R1 = {R, D}: se proyecta y se eliminan duplicados, que es
+--     precisamente la redundancia que el esquema original almacenaba.
+INSERT INTO responsable_deposito (responsable_control_id, deposito_id)
+SELECT DISTINCT responsable_control_id, deposito_id
+FROM control_lote_almacen;
+INSERT 0 2
+-- 5.2 Migraci├│n de R2 = {L, R}
+INSERT INTO control_lote_responsable (lote_id, responsable_control_id)
+SELECT lote_id, responsable_control_id
+FROM control_lote_almacen;
+INSERT 0 3
+-- 5.3 Vista de compatibilidad: reconstruye la relaci├│n original mediante una
+--     reuni├│n natural por el atributo com├║n responsable_control_id.
+CREATE VIEW control_lote_almacen_v AS
+SELECT clr.lote_id,
+       rd.deposito_id,
+       rd.responsable_control_id
+FROM control_lote_responsable clr
+NATURAL JOIN responsable_deposito rd;
+CREATE VIEW
+-- 5.4 Verificaci├│n de equivalencia: la diferencia sim├®trica entre la instancia
+--     original y la reconstruida por la vista debe ser vac├¡a.
+WITH diferencias AS (
+    (SELECT lote_id, deposito_id, responsable_control_id
+       FROM control_lote_almacen_orig
+     EXCEPT
+     SELECT lote_id, deposito_id, responsable_control_id
+       FROM control_lote_almacen_v)
+    UNION ALL
+    (SELECT lote_id, deposito_id, responsable_control_id
+       FROM control_lote_almacen_v
+     EXCEPT
+     SELECT lote_id, deposito_id, responsable_control_id
+       FROM control_lote_almacen_orig)
+)
+SELECT 'equivalencia vista vs. original' AS verificacion,
+       CASE WHEN COUNT(*) = 0 THEN 'OK: 0 diferencias' ELSE 'FALLA' END AS resultado,
+       COUNT(*) AS diferencias
+FROM diferencias;
+          verificacion           |     resultado     | diferencias 
+---------------------------------+-------------------+-------------
+ equivalencia vista vs. original | OK: 0 diferencias |           0
+(1 fila)
+
+-- 5.5 Conteos: 3 filas en el original, 2 en R1 y 3 en R2.
+SELECT 'control_lote_almacen_orig' AS objeto, COUNT(*) AS filas FROM control_lote_almacen_orig
+UNION ALL
+SELECT 'responsable_deposito',      COUNT(*) FROM responsable_deposito
+UNION ALL
+SELECT 'control_lote_responsable',  COUNT(*) FROM control_lote_responsable
+UNION ALL
+SELECT 'vista control_lote_almacen_v', COUNT(*) FROM control_lote_almacen_v;
+            objeto            | filas 
+------------------------------+-------
+ control_lote_almacen_orig    |     3
+ responsable_deposito         |     2
+ control_lote_responsable     |     3
+ vista control_lote_almacen_v |     3
+(4 filas)
+
+-- 5.6 La vista reconstruye exactamente el ejemplo del enunciado.
+SELECT lote_id, deposito_id, responsable_control_id
+FROM control_lote_almacen_v
+ORDER BY lote_id, deposito_id;
+ lote_id | deposito_id | responsable_control_id 
+---------+-------------+------------------------
+     501 |          30 |                    801
+     502 |          30 |                    801
+     503 |          31 |                    802
+(3 filas)
+
+-- ----------------------------------------------------------------------------
+-- 5.7 (Opcional) La DF (L,D) -> R no se preserva en ninguna de las dos tablas:
+--     es el precio conocido de la descomposici├│n en FNBC. Si se quiere seguir
+--     garantizando la regla de negocio a nivel de motor, se agrega un trigger
+--     de restricci├│n. Se deja implementado y activo porque la regla es parte
+--     del dominio, no del esquema original.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_control_unico_por_lote_deposito()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_deposito BIGINT;
+    v_cantidad INT;
+BEGIN
+    SELECT deposito_id INTO v_deposito
+    FROM responsable_deposito
+    WHERE responsable_control_id = NEW.responsable_control_id;
+
+    SELECT COUNT(*) INTO v_cantidad
+    FROM control_lote_responsable clr
+    JOIN responsable_deposito rd
+      ON rd.responsable_control_id = clr.responsable_control_id
+    WHERE clr.lote_id = NEW.lote_id
+      AND rd.deposito_id = v_deposito;
+
+    IF v_cantidad > 1 THEN
+        RAISE EXCEPTION
+            'El lote % ya tiene un responsable de control en el deposito %',
+            NEW.lote_id, v_deposito;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION
+CREATE CONSTRAINT TRIGGER trg_control_unico_por_lote_deposito
+AFTER INSERT OR UPDATE ON control_lote_responsable
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION fn_control_unico_por_lote_deposito();
+CREATE TRIGGER
+-- ----------------------------------------------------------------------------
+-- RESPUESTAS RESUMIDAS
+--
+-- a) DF: (LoteID, DepositoID) -> ResponsableControlID
+--        ResponsableControlID -> DepositoID
+-- b) Claves candidatas: {LoteID, DepositoID} y {LoteID, ResponsableControlID}.
+--    Primos: LoteID, DepositoID, ResponsableControlID. No primos: ninguno.
+-- c) NO cumple FNBC: ResponsableControlID -> DepositoID es no trivial y su
+--    determinante no es superclave ({R}+ = {R, D} != {L, D, R}). S├¡ cumple 3FN,
+--    porque DepositoID es primo (por eso el caso es interesante).
+-- d) Ver secci├│n 3 (inserci├│n / actualizaci├│n / borrado).
+-- e) Ver secci├│n 4 y 5.1-5.3.
+-- f) R1 Ôê® R2 = {ResponsableControlID}; R -> D pertenece a F+, por lo tanto el
+--    atributo com├║n es superclave de R1 y la reuni├│n es sin p├®rdida.
+-- ----------------------------------------------------------------------------
