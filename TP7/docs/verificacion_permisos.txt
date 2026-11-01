@@ -1,0 +1,236 @@
+
+================================================================
+1. \du - ROLES DEL SERVIDOR
+================================================================
+                                  List of roles
++-------------------+------------------------------------------------------------+
+|     Role name     |                         Attributes                         |
++-------------------+------------------------------------------------------------+
+| admin_datos       |                                                            |
+| app_web           |                                                            |
+| etl_job           |                                                            |
+| postgres          | Superuser, Create role, Create DB, Replication, Bypass RLS |
+| rol_app_escritura | Cannot login                                               |
+| rol_app_lectura   | Cannot login                                               |
+| rol_auditoria     | Cannot login                                               |
+| rol_etl           | Cannot login                                               |
+| rol_reportes      | Cannot login                                               |
+| rol_soporte       | Cannot login                                               |
++-------------------+------------------------------------------------------------+
+
+
+================================================================
+2. ATRIBUTOS (equivalente consultable de \du, sólo roles de la Parte A)
+================================================================
++-------------------+-------+-----------+------------+----------+------------+-----------+---------------+
+|        rol        | login | superuser | createrole | createdb | bypass_rls | hereda_de | puede_delegar |
++-------------------+-------+-----------+------------+----------+------------+-----------+---------------+
+| admin_datos       | t     | f         | f          | f        | f          |         2 | f             |
+| app_web           | t     | f         | f          | f        | f          |         2 | f             |
+| etl_job           | t     | f         | f          | f        | f          |         1 | f             |
+| rol_app_escritura | f     | f         | f          | f        | f          |         0 |               |
+| rol_app_lectura   | f     | f         | f          | f        | f          |         0 |               |
+| rol_auditoria     | f     | f         | f          | f        | f          |         0 |               |
+| rol_etl           | f     | f         | f          | f        | f          |         0 |               |
+| rol_reportes      | f     | f         | f          | f        | f          |         0 |               |
+| rol_soporte       | f     | f         | f          | f        | f          |         0 |               |
++-------------------+-------+-----------+------------+----------+------------+-----------+---------------+
+(9 rows)
+
+
+================================================================
+3. PRIVILEGIOS A NIVEL DE TABLA / VISTA (information_schema.role_table_grants)
+================================================================
++-------------------+------------------------------------+----------------+
+|      grantee      |             table_name             | privilege_type |
++-------------------+------------------------------------+----------------+
+| rol_app_escritura | detalle_pedido                     | INSERT         |
+| rol_app_escritura | pedido                             | INSERT         |
+| rol_app_lectura   | categoria                          | SELECT         |
+| rol_app_lectura   | detalle_pedido                     | SELECT         |
+| rol_app_lectura   | pedido                             | SELECT         |
+| rol_app_lectura   | producto                           | SELECT         |
+| rol_app_lectura   | vista_detalle_pedido_producto      | SELECT         |
+| rol_app_lectura   | vista_pedidos_usuario              | SELECT         |
+| rol_app_lectura   | vista_productos_vigentes_categoria | SELECT         |
+| rol_auditoria     | login_intento                      | SELECT         |
+| rol_auditoria     | usuario_auditoria                  | SELECT         |
+| rol_auditoria     | vw_intentos_login_sospechosos      | SELECT         |
+| rol_etl           | detalle_pedido                     | INSERT         |
+| rol_etl           | pedido                             | INSERT         |
+| rol_reportes      | vista_detalle_pedido_producto      | SELECT         |
+| rol_reportes      | vista_pedidos_usuario              | SELECT         |
+| rol_reportes      | vista_productos_vigentes_categoria | SELECT         |
+| rol_soporte       | login_intento                      | SELECT         |
+| rol_soporte       | rol                                | SELECT         |
++-------------------+------------------------------------+----------------+
+(19 rows)
+
+
+================================================================
+4a. PRIVILEGIOS A NIVEL DE COLUMNA (information_schema.role_column_grants)
+    OJO: esta vista incluye la EXPANSION de los grants a nivel de tabla,
+    por eso se filtra a las tablas con PII y se compara en 5b contra el ACL real.
+================================================================
++-------------------+------------+----------------+----------------+
+|      grantee      | table_name |  column_name   | privilege_type |
++-------------------+------------+----------------+----------------+
+| rol_app_escritura | producto   | id_producto    | SELECT         |
+| rol_app_escritura | producto   | stock          | SELECT         |
+| rol_app_escritura | producto   | stock          | UPDATE         |
+| rol_app_lectura   | cliente    | activo         | SELECT         |
+| rol_app_lectura   | cliente    | fecha_creacion | SELECT         |
+| rol_app_lectura   | cliente    | id_cliente     | SELECT         |
+| rol_app_lectura   | cliente    | nombre         | SELECT         |
+| rol_app_lectura   | producto   | activo         | SELECT         |
+| rol_app_lectura   | producto   | id_categoria   | SELECT         |
+| rol_app_lectura   | producto   | id_producto    | SELECT         |
+| rol_app_lectura   | producto   | nombre         | SELECT         |
+| rol_app_lectura   | producto   | precio_lista   | SELECT         |
+| rol_app_lectura   | producto   | stock          | SELECT         |
+| rol_soporte       | usuario    | activo         | SELECT         |
+| rol_soporte       | usuario    | apellido       | SELECT         |
+| rol_soporte       | usuario    | email          | SELECT         |
+| rol_soporte       | usuario    | fecha_alta     | SELECT         |
+| rol_soporte       | usuario    | id_cliente     | SELECT         |
+| rol_soporte       | usuario    | id_rol         | SELECT         |
+| rol_soporte       | usuario    | id_usuario     | SELECT         |
+| rol_soporte       | usuario    | nombre         | SELECT         |
+| rol_soporte       | usuario    | telefono       | SELECT         |
+| rol_soporte       | usuario    | ultimo_acceso  | SELECT         |
++-------------------+------------+----------------+----------------+
+(23 rows)
+
+
+================================================================
+4b. ACL REAL POR COLUMNA (pg_attribute.attacl)
+    Es el unico lugar donde viven los grants A NIVEL DE COLUMNA:
+    information_schema no permite distinguirlos de los de tabla.
+================================================================
++-------------------+----------+----------------+----------------+
+|      grantee      |  tabla   |    columna     | privilege_type |
++-------------------+----------+----------------+----------------+
+| rol_app_escritura | producto | id_producto    | SELECT         |
+| rol_app_escritura | producto | stock          | SELECT         |
+| rol_app_escritura | producto | stock          | UPDATE         |
+| rol_app_lectura   | cliente  | activo         | SELECT         |
+| rol_app_lectura   | cliente  | fecha_creacion | SELECT         |
+| rol_app_lectura   | cliente  | id_cliente     | SELECT         |
+| rol_app_lectura   | cliente  | nombre         | SELECT         |
+| rol_soporte       | usuario  | activo         | SELECT         |
+| rol_soporte       | usuario  | apellido       | SELECT         |
+| rol_soporte       | usuario  | email          | SELECT         |
+| rol_soporte       | usuario  | fecha_alta     | SELECT         |
+| rol_soporte       | usuario  | id_cliente     | SELECT         |
+| rol_soporte       | usuario  | id_rol         | SELECT         |
+| rol_soporte       | usuario  | id_usuario     | SELECT         |
+| rol_soporte       | usuario  | nombre         | SELECT         |
+| rol_soporte       | usuario  | telefono       | SELECT         |
+| rol_soporte       | usuario  | ultimo_acceso  | SELECT         |
++-------------------+----------+----------------+----------------+
+(17 rows)
+
+
+================================================================
+5a. DIFF A NIVEL DE TABLA  (OK / FALTANTE / SOBRANTE)
+================================================================
++-------------------+------------------------------------+------------+--------+
+|        rol        |               objeto               | privilegio | estado |
++-------------------+------------------------------------+------------+--------+
+| rol_app_escritura | detalle_pedido                     | INSERT     | OK     |
+| rol_app_escritura | pedido                             | INSERT     | OK     |
+| rol_app_lectura   | categoria                          | SELECT     | OK     |
+| rol_app_lectura   | detalle_pedido                     | SELECT     | OK     |
+| rol_app_lectura   | pedido                             | SELECT     | OK     |
+| rol_app_lectura   | producto                           | SELECT     | OK     |
+| rol_app_lectura   | vista_detalle_pedido_producto      | SELECT     | OK     |
+| rol_app_lectura   | vista_pedidos_usuario              | SELECT     | OK     |
+| rol_app_lectura   | vista_productos_vigentes_categoria | SELECT     | OK     |
+| rol_auditoria     | login_intento                      | SELECT     | OK     |
+| rol_auditoria     | usuario_auditoria                  | SELECT     | OK     |
+| rol_auditoria     | vw_intentos_login_sospechosos      | SELECT     | OK     |
+| rol_etl           | detalle_pedido                     | INSERT     | OK     |
+| rol_etl           | pedido                             | INSERT     | OK     |
+| rol_reportes      | mv_facturacion_categoria_mes       | SELECT     | OK     |
+| rol_reportes      | vista_detalle_pedido_producto      | SELECT     | OK     |
+| rol_reportes      | vista_pedidos_usuario              | SELECT     | OK     |
+| rol_reportes      | vista_productos_vigentes_categoria | SELECT     | OK     |
+| rol_soporte       | login_intento                      | SELECT     | OK     |
+| rol_soporte       | rol                                | SELECT     | OK     |
++-------------------+------------------------------------+------------+--------+
+(20 rows)
+
+
+================================================================
+5b. DIFF A NIVEL DE COLUMNA  (OK / FALTANTE / SOBRANTE)
+================================================================
++-------------------+----------+----------------+------------+--------+
+|        rol        |  objeto  |    columna     | privilegio | estado |
++-------------------+----------+----------------+------------+--------+
+| rol_app_escritura | producto | id_producto    | SELECT     | OK     |
+| rol_app_escritura | producto | stock          | SELECT     | OK     |
+| rol_app_escritura | producto | stock          | UPDATE     | OK     |
+| rol_app_lectura   | cliente  | activo         | SELECT     | OK     |
+| rol_app_lectura   | cliente  | fecha_creacion | SELECT     | OK     |
+| rol_app_lectura   | cliente  | id_cliente     | SELECT     | OK     |
+| rol_app_lectura   | cliente  | nombre         | SELECT     | OK     |
+| rol_soporte       | usuario  | activo         | SELECT     | OK     |
+| rol_soporte       | usuario  | apellido       | SELECT     | OK     |
+| rol_soporte       | usuario  | email          | SELECT     | OK     |
+| rol_soporte       | usuario  | fecha_alta     | SELECT     | OK     |
+| rol_soporte       | usuario  | id_cliente     | SELECT     | OK     |
+| rol_soporte       | usuario  | id_rol         | SELECT     | OK     |
+| rol_soporte       | usuario  | id_usuario     | SELECT     | OK     |
+| rol_soporte       | usuario  | nombre         | SELECT     | OK     |
+| rol_soporte       | usuario  | telefono       | SELECT     | OK     |
+| rol_soporte       | usuario  | ultimo_acceso  | SELECT     | OK     |
++-------------------+----------+----------------+------------+--------+
+(17 rows)
+
+
+================================================================
+6. PRUEBAS NEGATIVAS — lo que DEBE fallar en la Parte C
+================================================================
++------------------------------------------------------------+----------+----------+-----------+
+|                            caso                            | esperado | obtenido | resultado |
++------------------------------------------------------------+----------+----------+-----------+
+| PUBLIC NO puede CREATE en el esquema public                | f        | f        | OK        |
+| admin_datos NO es miembro de rol_auditoria                 | f        | f        | OK        |
+| admin_datos NO tiene ADMIN OPTION sobre ningún rol         | f        | f        | OK        |
+| app_web NO es miembro de admin_datos                       | f        | f        | OK        |
+| app_web NO puede leer usuario.password_hash                | f        | f        | OK        |
+| app_web NO tiene ADMIN OPTION sobre ningún rol             | f        | f        | OK        |
+| app_web es miembro de rol_app_lectura                      | t        | t        | OK        |
+| ningún rol de aplicación es superusuario                   | f        | f        | OK        |
+| ningún rol de aplicación puede CREATE en el esquema public | f        | f        | OK        |
+| rol_app_escritura NO puede DELETE pedido                   | f        | f        | OK        |
+| rol_app_escritura NO puede INSERT en usuario               | f        | f        | OK        |
+| rol_app_escritura NO puede UPDATE producto.precio_lista    | f        | f        | OK        |
+| rol_app_escritura SÍ puede UPDATE producto.stock           | t        | t        | OK        |
+| rol_app_lectura NO puede leer cliente.email                | f        | f        | OK        |
+| rol_app_lectura NO puede leer cliente.telefono             | f        | f        | OK        |
+| rol_app_lectura SÍ puede leer cliente.nombre               | t        | t        | OK        |
+| rol_auditoria NO puede DELETE usuario_auditoria            | f        | f        | OK        |
+| rol_auditoria NO puede INSERT login_intento                | f        | f        | OK        |
+| rol_auditoria SÍ puede SELECT login_intento                | t        | t        | OK        |
+| rol_reportes NO puede SELECT usuario                       | f        | f        | OK        |
+| rol_reportes SÍ puede SELECT mv_facturacion_categoria_mes  | t        | t        | OK        |
+| rol_soporte NO puede leer usuario.password_hash            | f        | f        | OK        |
++------------------------------------------------------------+----------+----------+-----------+
+(22 rows)
+
+
+================================================================
+7. VEREDICTO FINAL
+================================================================
++-----------------+-----------------+-------------------+-------------------+-----------+
+| faltantes_tabla | sobrantes_tabla | faltantes_columna | sobrantes_columna | veredicto |
++-----------------+-----------------+-------------------+-------------------+-----------+
+|               0 |               0 |                 0 |                 0 | APROBADO  |
++-----------------+-----------------+-------------------+-------------------+-----------+
+(1 row)
+
+
+Recordatorio: los conteos de la sección 7 deben ser 0/0/0/0 y la sección 6
+no debe tener ninguna fila FALLA. Esa salida es el entregable de la Parte A.
+
