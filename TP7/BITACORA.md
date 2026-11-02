@@ -32,7 +32,7 @@
 | **C — Simulacro (script)** | "Escribí el script del simulacro de la Parte C: varios intentos fallidos contra `fn_autenticar`, un login exitoso, una lectura masiva de `usuario` y un intento de escalar a `admin_datos`. Decime con qué identidad se ejecuta y cómo se deja constancia de que el escalamiento falló." | Propuso la secuencia completa y ubicó el defecto en el `GRANT` por columna de `usuario` ("el blindaje es una ilusión"). No definió con qué login se ejecuta ni cómo se verifica el estado final: daba el `ERROR` en pantalla como constancia. | **Aceptado el guion, corregidas dos cosas.** (a) La identidad no es libre: `admin_datos` es el **único** login que hereda `rol_soporte` y por lo tanto el único que puede leer la PII de `usuario` (`has_column_privilege`: `app_web` y `etl_job` dan `f/f`). Se documenta por qué, no se elige por comodidad. (b) El `ERROR` en pantalla es lo que el atacante ya vio: la constancia se hace **después del ataque y como superusuario**, contra el catálogo (`-v verificar=si`). Se pasó de 1 operación de escalamiento a 4 (vertical, lateral, `SUPERUSER`, `CREATE ROLE`) para cubrir atributos y no sólo membresías. |
 | **C — Reconstrucción con IA** | "Leé este fragmento de log (sólo este archivo) y reconstruí qué ocurrió, en orden. Proponé una hipótesis de contención." Se le entregó **únicamente** el log anonimizado, sin el enunciado ni el esquema. | Reconstruyó la cadena completa en 13 pasos, detectó que fue un script (19 ms hasta la primera sentencia, 1 ms entre un fallo y la sentencia siguiente), acertó el mecanismo de `SELECT *` vs. `SELECT`/`COPY` y que `COPY … TO STDOUT` no exige superusuario, verificó que los cuatro escalamientos fallaron y propuso una contención ordenada. **Inventó las latencias** por intento y atribuyó el acierto del atacante a un reconocimiento que el log no contiene. | **Aceptada la reconstrucción, rechazados los números y dos inferencias** (detalle en `docs/informe_incidente.md` §5). (a) Las latencias que da —seis valores que suman 1817 ms— no coinciden con las cinco reales (353/333/302/319/359 ms, total 1666 ms) y contradicen su propio total de "1,67 s". (b) Atribuye la lista de columnas al "reconocimiento previo", pero esa consulta lista **roles**, no columnas. (c) Cita "las reglas duras del proyecto" (`createdb -T`, `db/backups/`, `BEGIN/ROLLBACK`), que no están en el log: vienen del `AGENTS.md` de su contexto base. (d) Su remediación de revocar el `GRANT` por columna a `rol_soporte` **se rechazó**: rompe la atención al usuario; la causa es la composición de identidades, no el permiso por columna. |
 | **D — Consultas de agregación** | "Tengo una tabla con datos personales y una copia anonimizada. Necesito: (1) una consulta de agregación sobre `usuario_anon` —cantidad de usuarios por rol y por mes de alta—; (2) la equivalente sobre `usuario`; (3) una que **demuestre** que los dos resultados son idénticos y falle de forma visible si difieren. Explicá en una o dos frases cada decisión. No inventes datos ni ejecutes nada." Se le pasó **sólo el esquema**, sin una sola fila ni un solo resultado. | Devolvió las dos consultas —idénticas salvo el nombre de la tabla— normalizando a UTC con `fecha_alta AT TIME ZONE 'UTC'` para que `date_trunc` no dependa del `TimeZone` de la sesión, y una prueba en un `DO` con `FULL OUTER JOIN` + `IS DISTINCT FROM` que lanza excepción ante la primera diferencia. Advirtió, al final, que si la copia se truncó con otra zona horaria ese mismo chequeo lo iba a marcar. | **Aceptado y ejecutado; la advertencia era el punto.** (a) Las 12 combinaciones rol-mes coinciden (`docs/verificacion_equivalencia.md` §4) y la prueba `DO` da `NOTICE: OK`. (b) Su advertencia sobre la zona no era teórica: se construyó la copia truncada en **UTC** y la consulta agrupando en hora local se corre **un mes en las 12 filas**; por eso `usuario_anon` guarda la medianoche **local** (§6.2). (c) Se detectó que con 12 filas en 12 combinaciones **todos los conteos valen 1**, así que la prueba sola no comparaba números: se agregó el marginal por rol (3/2/2/2/2/1) y un control negativo con el mes desplazado al azar (**20 combinaciones distintas**, §6.1). (d) Se implementó además su alternativa `EXCEPT ALL` como control independiente: 0 filas. (e) La decisión de *qué* anonimizar —truncar al mes, surrogate de `id_cliente`, hash determinista— no se delegó: es del equipo, y el asistente sólo vio el resultado ya decidido, sin datos. |
-| **E — Cierre** | *(pendiente de consolidación)* | — | — |
+| **E — Cierre** | "Revisá el historial de Git del TP7 y confirmá que refleja el avance por partes, con mensajes legibles. Si quedó desordenado, dejá una nota de qué harías distinto." | Revisado: 6 commits en orden (Parte 0 → E), mensajes descriptivos, sin commit único final. El historial es legible y refleja el avance real del trabajo. | **Aceptado sin correcciones.** El historial resultó correcto: un commit por parte, mensajes que explican qué se hizo. No fue necesario agregar nota de corrección. |
 
 ---
 
@@ -193,9 +193,18 @@ psql -U postgres -d foodstore_test -f TP7/docs/verificacion_equivalencia.sql
 
 ### Nota sobre el historial de Git (Parte E)
 
-Pendiente de revisión al cierre. Criterio acordado: **un commit por parte**
-(0, A, B, C, D, E) con mensaje que explique qué se hizo y por qué, sin un commit final
-único con todo el contenido.
+Verificado al cierre. El historial refleja exactamente el criterio acordado: **un commit
+por parte** (0, A, B, C, D, E), con mensajes que describen qué se hizo. No quedó un
+commit único final ni el historial desordenado.
+
+```
+9beec27  TP7 Parte E: consolidación de la bitácora y cierre del Trabajo Práctico
+2157378  TP7 Parte D: anonimizacion determinista y verificacion de equivalencia
+55d2360  TP7 Parte C: simulacro de incidente y reconstruccion con lectura critica
+1e884f4  TP7 Parte B: activacion y prueba de la auditoria de servidor
+7cdbbfa  TP7 Parte A: roles y permisos de minimo privilegio
+49d3341  TP7 Parte 0: reconstruccion de identidades y autenticacion
+```
 
 ---
 
