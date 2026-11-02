@@ -1,0 +1,93 @@
+================================================================================
+FRAGMENTO DE LOG - PARTE B (auditoria de servidor)
+TP Unidad 5 - Food Store / PostgreSQL 17.11
+
+Fuente......: <data_directory>/log/postgresql-2026-11-01_204704.log
+              (log_destination = csvlog,stderr)
+Ventana.....: 2026-11-01 20:47:04.460 -03  ->  20:47:10.295 -03
+Delimitacion: la ventana se abrio y cerro con SELECT pg_rotate_logfile(), de modo
+              que este archivo contiene exactamente la secuencia de prueba.
+
+QUE SE OMITIO (y por que):
+  - La primera linea del archivo original (20:47:04.359): es la desconexion de la
+    sesion de DBA que ejecuto la rotacion para abrir la ventana. No es parte de la
+    prueba.
+  - Las 4 lineas posteriores a la desconexion de app_web (desde 20:47:15.078): son
+    la sesion de DBA que ejecuto la rotacion para cerrar la ventana.
+  Nada de lo ocurrido ENTRE el primer intento de conexion y la desconexion de app_web
+  fue recortado ni editado.
+
+QUE CONTIENE, EN ORDEN:
+  1. Tres rechazos de conexion por contrasena incorrecta (FATAL, nivel motor).
+  2. Una conexion aceptada de app_web (scram-sha-256).
+  3. Lectura, insercion de pedido + detalle y actualizacion de stock.
+  4. Tres inicios de sesion fallidos contra fn_autenticar (nivel aplicacion).
+  5. Dos operaciones denegadas: lectura de usuario y GRANT admin_datos TO app_web.
+  6. Desconexion de la sesion (log_disconnections).
+
+NOTA: las contrasenas de los intentos fallidos de fn_autenticar aparecen en claro
+      porque log_statement = all. Es un hallazgo, no un descuido:
+      ver docs/informe_auditoria.md, seccion 4 (H1).
+================================================================================
+
+2026-11-01 20:47:04.460 -03 [21728] [unknown]@[unknown]/[unknown] host=::1 LOG:  connection received: host=::1 port=63227
+2026-11-01 20:47:04.474 -03 [21728] app_web@foodstore_test/[unknown] host=::1 FATAL:  password authentication failed for user "app_web"
+2026-11-01 20:47:04.474 -03 [21728] app_web@foodstore_test/[unknown] host=::1 DETAIL:  Connection matched file "C:/Users/agusc/AppData/Local/Temp/opencode/tp7pg/pg_hba.conf" line 120: "host    all             app_web         ::1/128                 scram-sha-256"
+2026-11-01 20:47:04.565 -03 [2416] [unknown]@[unknown]/[unknown] host=::1 LOG:  connection received: host=::1 port=63228
+2026-11-01 20:47:04.580 -03 [2416] app_web@foodstore_test/[unknown] host=::1 FATAL:  password authentication failed for user "app_web"
+2026-11-01 20:47:04.580 -03 [2416] app_web@foodstore_test/[unknown] host=::1 DETAIL:  Connection matched file "C:/Users/agusc/AppData/Local/Temp/opencode/tp7pg/pg_hba.conf" line 120: "host    all             app_web         ::1/128                 scram-sha-256"
+2026-11-01 20:47:04.755 -03 [14680] [unknown]@[unknown]/[unknown] host=::1 LOG:  connection received: host=::1 port=63230
+2026-11-01 20:47:04.775 -03 [14680] app_web@foodstore_test/[unknown] host=::1 FATAL:  password authentication failed for user "app_web"
+2026-11-01 20:47:04.775 -03 [14680] app_web@foodstore_test/[unknown] host=::1 DETAIL:  Connection matched file "C:/Users/agusc/AppData/Local/Temp/opencode/tp7pg/pg_hba.conf" line 120: "host    all             app_web         ::1/128                 scram-sha-256"
+2026-11-01 20:47:09.256 -03 [3480] [unknown]@[unknown]/[unknown] host=::1 LOG:  connection received: host=::1 port=63231
+2026-11-01 20:47:09.271 -03 [3480] app_web@foodstore_test/[unknown] host=::1 LOG:  connection authenticated: identity="app_web" method=scram-sha-256 (C:/Users/agusc/AppData/Local/Temp/opencode/tp7pg/pg_hba.conf:120)
+2026-11-01 20:47:09.271 -03 [3480] app_web@foodstore_test/[unknown] host=::1 LOG:  connection authorized: user=app_web database=foodstore_test application_name=psql
+2026-11-01 20:47:09.275 -03 [3480] app_web@foodstore_test/psql host=::1 LOG:  statement: SELECT name, setting, unit, source
+	FROM pg_settings
+	WHERE name IN ('logging_collector','log_destination','log_directory',
+	               'log_filename','log_line_prefix','log_connections',
+	               'log_disconnections','log_statement','log_min_duration_statement',
+	               'log_rotation_age','log_rotation_size','log_timezone','log_file_mode')
+	ORDER BY name;
+2026-11-01 20:47:09.285 -03 [3480] app_web@foodstore_test/psql host=::1 LOG:  statement: SET application_name = 'tp7_parte_b';
+2026-11-01 20:47:09.286 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT id_producto, nombre, stock
+	FROM producto
+	ORDER BY id_producto;
+2026-11-01 20:47:09.292 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: INSERT INTO pedido (id_cliente, forma_pago)
+	VALUES (1, 'TARJETA')
+	RETURNING id_pedido 
+2026-11-01 20:47:09.301 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: INSERT INTO detalle_pedido (id_pedido, id_producto, cantidad, precio_unitario_facturado)
+	VALUES (1, 1, 2, 1500.00);
+2026-11-01 20:47:09.304 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: UPDATE producto
+	   SET stock = stock - 2
+	 WHERE id_producto = 1;
+2026-11-01 20:47:09.308 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT * FROM fn_autenticar('maria.gonzalez@foodstore.test', 'clave_incorrecta_auditoria');
+2026-11-01 20:47:09.648 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT * FROM fn_autenticar('maria.gonzalez@foodstore.test', 'segunda_clave_incorrecta');
+2026-11-01 20:47:09.955 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT * FROM fn_autenticar('maria.gonzalez@foodstore.test', 'tercera_clave_incorrecta');
+2026-11-01 20:47:10.287 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT * FROM usuario LIMIT 1;
+2026-11-01 20:47:10.287 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 ERROR:  permission denied for table usuario
+2026-11-01 20:47:10.287 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 STATEMENT:  SELECT * FROM usuario LIMIT 1;
+2026-11-01 20:47:10.288 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: GRANT admin_datos TO app_web;
+2026-11-01 20:47:10.288 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 ERROR:  permission denied to grant role "admin_datos"
+2026-11-01 20:47:10.288 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 DETAIL:  Only roles with the ADMIN option on role "admin_datos" may grant this role.
+2026-11-01 20:47:10.288 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 STATEMENT:  GRANT admin_datos TO app_web;
+2026-11-01 20:47:10.289 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT id_pedido, id_cliente, forma_pago, fecha_pedido
+	FROM pedido
+	ORDER BY id_pedido DESC
+	LIMIT 3;
+2026-11-01 20:47:10.291 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT id_producto, nombre, stock
+	FROM producto
+	ORDER BY id_producto;
+2026-11-01 20:47:10.292 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT ocurrido_en, email_intentado, exito, motivo, origen
+	FROM login_intento
+	ORDER BY id_intento DESC
+	LIMIT 10;
+2026-11-01 20:47:10.292 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 ERROR:  permission denied for table login_intento
+2026-11-01 20:47:10.292 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 STATEMENT:  SELECT ocurrido_en, email_intentado, exito, motivo, origen
+	FROM login_intento
+	ORDER BY id_intento DESC
+	LIMIT 10;
+2026-11-01 20:47:10.293 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  statement: SELECT * FROM vw_intentos_login_sospechosos;
+2026-11-01 20:47:10.295 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 ERROR:  permission denied for view vw_intentos_login_sospechosos
+2026-11-01 20:47:10.295 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 STATEMENT:  SELECT * FROM vw_intentos_login_sospechosos;
+2026-11-01 20:47:10.295 -03 [3480] app_web@foodstore_test/tp7_parte_b host=::1 LOG:  disconnection: session time: 0:00:01.047 user=app_web database=foodstore_test host=::1 port=63231
