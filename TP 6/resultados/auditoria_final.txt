@@ -1,4 +1,0 @@
- fecha | categoria_id | total_esperado | total_resumen | diferencia | items_esperados | items_resumen 
--------+--------------+----------------+---------------+------------+-----------------+---------------
-(0 filas)
-

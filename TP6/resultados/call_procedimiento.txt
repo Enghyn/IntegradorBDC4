@@ -1,0 +1,53 @@
+Timing is on.
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2024-10-29 .. 2025-01-26 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2025-01-27 .. 2025-04-26 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2025-04-27 .. 2025-07-25 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2025-07-26 .. 2025-10-23 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2025-10-24 .. 2026-01-21 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2026-01-22 .. 2026-04-21 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2026-04-22 .. 2026-07-20 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2026-07-21 .. 2026-10-18 reconstruido
+psql:resultados/call_procedimiento.sql:11: NOTICE:  fs_reconstruir_resumen: rango 2026-10-19 .. 2026-10-29 reconstruido
+CALL
+Time: 2547,507 ms (00:02,548)
+ diferencias 
+-------------
+           0
+(1 row)
+
+Time: 564,209 ms
+ filas |   desde    |   hasta    
+-------+------------+------------
+  8760 | 2024-10-30 | 2026-10-29
+(1 row)
+
+Time: 1,925 ms
+BEGIN
+Time: 0,104 ms
+psql:resultados/call_procedimiento.sql:26: NOTICE:  fs_reconstruir_resumen: rango 2026-10-29 .. 2026-10-29 reconstruido
+psql:resultados/call_procedimiento.sql:26: ERROR:  invalid transaction termination
+CONTEXT:  PL/pgSQL function fs_reconstruir_resumen(date,date,boolean,integer) line 39 at COMMIT
+Time: 4,746 ms
+ROLLBACK
+Time: 0,111 ms
+BEGIN
+Time: 0,099 ms
+UPDATE 12
+Time: 0,349 ms
+ diferencias_antes 
+-------------------
+                12
+(1 row)
+
+Time: 520,163 ms
+psql:resultados/call_procedimiento.sql:36: NOTICE:  fs_reconstruir_resumen: rango 2026-10-29 .. 2026-10-29 reconstruido
+CALL
+Time: 4,419 ms
+ diferencias_despues 
+---------------------
+                   0
+(1 row)
+
+Time: 542,918 ms
+ROLLBACK
+Time: 0,378 ms

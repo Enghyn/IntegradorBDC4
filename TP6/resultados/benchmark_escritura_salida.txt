@@ -1,0 +1,63 @@
+﻿El despliegue de duraci¾n estß activado.
+El paginador no se usarß.
+--- R1 con trigger ---
+BEGIN
+Duraci¾n: 0,241 ms
+INSERT 0 1615
+Duraci¾n: 186,688 ms
+ROLLBACK
+Duraci¾n: 0,191 ms
+--- R1 sin trigger ---
+BEGIN
+Duraci¾n: 0,127 ms
+ALTER TABLE
+Duraci¾n: 1,420 ms
+INSERT 0 1615
+Duraci¾n: 31,704 ms
+ALTER TABLE
+Duraci¾n: 0,547 ms
+ROLLBACK
+Duraci¾n: 0,170 ms
+--- R2 sin trigger ---
+BEGIN
+Duraci¾n: 0,087 ms
+ALTER TABLE
+Duraci¾n: 0,277 ms
+INSERT 0 1615
+Duraci¾n: 33,364 ms
+ALTER TABLE
+Duraci¾n: 0,686 ms
+ROLLBACK
+Duraci¾n: 0,194 ms
+--- R2 con trigger ---
+BEGIN
+Duraci¾n: 0,145 ms
+INSERT 0 1615
+Duraci¾n: 179,035 ms
+ROLLBACK
+Duraci¾n: 0,289 ms
+--- R3 con trigger ---
+BEGIN
+Duraci¾n: 0,094 ms
+INSERT 0 1615
+Duraci¾n: 178,273 ms
+ROLLBACK
+Duraci¾n: 0,275 ms
+--- R3 sin trigger ---
+BEGIN
+Duraci¾n: 0,101 ms
+ALTER TABLE
+Duraci¾n: 0,707 ms
+INSERT 0 1615
+Duraci¾n: 31,523 ms
+ALTER TABLE
+Duraci¾n: 0,425 ms
+ROLLBACK
+Duraci¾n: 0,218 ms
+--- auditoria final ---
+ diferencias 
+-------------
+           0
+(1 fila)
+
+Duraci¾n: 544,452 ms
