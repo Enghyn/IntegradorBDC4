@@ -1,0 +1,96 @@
+================================================================================
+FRAGMENTO DE LOG ANONIMIZADO - PARTE C (simulacro de incidente)
+TP Unidad 5 - Food Store / PostgreSQL 17.11
+================================================================================
+
+Fuente ......: <data_directory>/log/postgresql-2026-11-01_212137.log
+               (log_destination = csvlog,stderr; log_statement = all)
+Ventana .....: 2026-11-01 21:21:37.617 -03 -> 21:21:39.700 -03
+Delimitacion : la ventana se abrio y cerro con SELECT pg_rotate_logfile(),
+               de modo que el archivo contiene exactamente el simulacro.
+
+QUE SE ENMASCARA Y CON QUE REGLA
+  - Mails ............... u06@ejemplo.test        (unico usuario final que
+                          aparece en el fragmento)
+  - Credenciales ........ <CLAVE_01> .. <CLAVE_06>
+                          Cada valor distinto conserva su numero: el lector
+                          puede ver que hubo seis intentos con seis valores
+                          diferentes sin recibir ninguna contrasena.
+  - Directorio de datos . <data_directory>
+                          El path original contiene el nombre de usuario del
+                          sistema operativo, que identifica a una persona.
+
+QUE NO SE ENMASCARA, Y POR QUE
+  - Nombres de rol (admin_datos, app_web, rol_soporte, postgres): no son datos
+    personales y son necesarios para reconstruir el incidente.
+  - host=::1, puertos y PIDs: no identifican a nadie; el puerto local cambia
+    en cada conexion.
+  - Timestamps: se conservan porque la reconstruccion depende del orden y de
+    los intervalos entre eventos.
+  - Nombres, telefonos y fechas de alta de los usuarios: NO aparecen en el log
+    porque el log registra la sentencia, no las filas que devolvio.
+
+NOTA: lo que sigue es la extraccion literal del archivo de log, sin recortes ni
+ediciones, salvo las sustituciones de la tabla de arriba.
+================================================================================
+
+2026-11-01 21:21:37.617 -03 [23104] [unknown]@[unknown]/[unknown] host=::1 LOG:  connection received: host=::1 port=65335
+2026-11-01 21:21:37.633 -03 [23104] admin_datos@foodstore_test/[unknown] host=::1 LOG:  connection authenticated: identity="admin_datos" method=scram-sha-256 (<data_directory>/pg_hba.conf:122)
+2026-11-01 21:21:37.633 -03 [23104] admin_datos@foodstore_test/[unknown] host=::1 LOG:  connection authorized: user=admin_datos database=foodstore_test application_name=psql
+2026-11-01 21:21:37.636 -03 [23104] admin_datos@foodstore_test/psql host=::1 LOG:  statement: DO $guard$
+	BEGIN
+	    IF current_database() !~* '(test|dev|local)'
+	       AND coalesce(current_setting('tp7.entorno_confirmado', true), '') <> 'si' THEN
+	        RAISE EXCEPTION
+	            'La base "%" no parece de desarrollo (debe contener test, dev o local). '
+	            'Si el equipo confirma que es una copia de trabajo, ejecutar antes: '
+	            'SET tp7.entorno_confirmado = ''si'';',
+	            current_database();
+	    END IF;
+	END
+	$guard$;
+2026-11-01 21:21:37.638 -03 [23104] admin_datos@foodstore_test/psql host=::1 LOG:  statement: SET application_name = 'simulacro_parte_c';
+2026-11-01 21:21:37.638 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT current_user AS login_de_sesion,
+	       current_database() AS base,
+	       inet_client_addr() IS NULL AS conexion_local_sin_ip,
+	       current_setting('application_name') AS app,
+	       (SELECT string_agg(r.rolname, ', ' ORDER BY r.rolname)
+	          FROM pg_roles r
+	         WHERE pg_has_role(current_user, r.oid, 'MEMBER')
+	           AND r.rolname LIKE 'rol\_%') AS roles_heredados;
+2026-11-01 21:21:37.642 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM fn_autenticar('u06@ejemplo.test', '<CLAVE_01>');
+2026-11-01 21:21:37.995 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM fn_autenticar('u06@ejemplo.test', '<CLAVE_02>');
+2026-11-01 21:21:38.259 -03 [1452] LOG:  checkpoint starting: time
+2026-11-01 21:21:38.328 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM fn_autenticar('u06@ejemplo.test', '<CLAVE_03>');
+2026-11-01 21:21:38.630 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM fn_autenticar('u06@ejemplo.test', '<CLAVE_04>');
+2026-11-01 21:21:38.949 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM fn_autenticar('u06@ejemplo.test', '<CLAVE_05>');
+2026-11-01 21:21:39.158 -03 [1452] LOG:  checkpoint complete: wrote 9 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.881 s, sync=0.008 s, total=0.899 s; sync files=9, longest=0.004 s, average=0.001 s; distance=20 kB, estimate=20 kB; lsn=0/2042FF0, redo lsn=0/2041540
+2026-11-01 21:21:39.308 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM fn_autenticar('u06@ejemplo.test', '<CLAVE_06>');
+2026-11-01 21:21:39.695 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT * FROM usuario LIMIT 1;
+2026-11-01 21:21:39.695 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 ERROR:  permission denied for table usuario
+2026-11-01 21:21:39.695 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 STATEMENT:  SELECT * FROM usuario LIMIT 1;
+2026-11-01 21:21:39.696 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: SELECT id_usuario, email, nombre, apellido, telefono, fecha_alta
+	FROM usuario
+	ORDER BY id_usuario;
+2026-11-01 21:21:39.697 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: COPY (
+	    SELECT id_usuario, email, nombre, apellido, telefono, fecha_alta
+	    FROM usuario
+	    ORDER BY id_usuario
+	) TO STDOUT WITH (FORMAT csv, HEADER true);
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: GRANT admin_datos TO app_web;
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 ERROR:  permission denied to grant role "admin_datos"
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 DETAIL:  Only roles with the ADMIN option on role "admin_datos" may grant this role.
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 STATEMENT:  GRANT admin_datos TO app_web;
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: GRANT rol_soporte TO app_web;
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 ERROR:  permission denied to grant role "rol_soporte"
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 DETAIL:  Only roles with the ADMIN option on role "rol_soporte" may grant this role.
+2026-11-01 21:21:39.698 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 STATEMENT:  GRANT rol_soporte TO app_web;
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: ALTER ROLE app_web SUPERUSER;
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 ERROR:  permission denied to alter role
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 DETAIL:  Only roles with the SUPERUSER attribute may change the SUPERUSER attribute.
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 STATEMENT:  ALTER ROLE app_web SUPERUSER;
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  statement: CREATE ROLE backdoor LOGIN;
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 ERROR:  permission denied to create role
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 DETAIL:  Only roles with the CREATEROLE attribute may create roles.
+2026-11-01 21:21:39.699 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 STATEMENT:  CREATE ROLE backdoor LOGIN;
+2026-11-01 21:21:39.700 -03 [23104] admin_datos@foodstore_test/simulacro_parte_c host=::1 LOG:  disconnection: session time: 0:00:02.090 user=admin_datos database=foodstore_test host=::1 port=65335
