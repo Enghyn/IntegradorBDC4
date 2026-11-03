@@ -1,0 +1,74 @@
+﻿=== 1. TAMA├æO DE LA BASE Y DE LAS TABLAS PRINCIPALES ===
+   base    | tamano_total 
+-----------+--------------
+ foodstore | 103 MB
+(1 fila)
+
+     tabla      | tamano_total | solo_tabla | indices_y_toast 
+----------------+--------------+------------+-----------------
+ detalle_pedido | 65 MB        | 40 MB      | 25 MB
+ pedido         | 18 MB        | 11 MB      | 6296 kB
+ producto       | 9000 kB      | 4128 kB    | 4872 kB
+ cliente        | 4176 kB      | 1968 kB    | 2208 kB
+ categoria      | 40 kB        | 8192 bytes | 32 kB
+(5 filas)
+
+=== 2. ACTIVIDAD DE CONEXIONES Y TRANSACCIONES ===
+   base    | conexiones_actuales | commits | rollbacks | pct_rollback | bloques_leidos | bloques_cache | cache_hit_pct | deadlocks | archivos_temp | bytes_temp | stats_desde 
+-----------+---------------------+---------+-----------+--------------+----------------+---------------+---------------+-----------+---------------+------------+-------------
+ foodstore |                   1 |      64 |         1 |         1.54 |             10 |      13320409 |        100.00 |         0 |             4 | 35 MB      | 
+(1 fila)
+
+ state  | conexiones 
+--------+------------
+ active |          1
+(1 fila)
+
+=== 3. ESTADO DE TABLAS: TUPLAS, AUTOVACUUM Y ESTAD├ìSTICAS ===
+     tabla      | tuplas_vivas | tuplas_muertas | pct_muertas | cambios_sin_analyze | ultimo_vacuum |       ultimo_autovacuum       |        ultimo_analyze         |      ultimo_autoanalyze       | scans_secuenciales | scans_indice 
+----------------+--------------+----------------+-------------+---------------------+---------------+-------------------------------+-------------------------------+-------------------------------+--------------------+--------------
+ categoria      |           10 |              0 |        0.00 |                  10 |               |                               |                               |                               |                  7 |        50000
+ cliente        |        20000 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:06.269639-03 | 2026-11-03 09:54:22.263662-03 |                               |                  7 |       200000
+ detalle_pedido |       700140 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:07.286384-03 | 2026-11-03 09:54:22.5205-03   | 2026-11-03 09:55:07.745962-03 |                  4 |            0
+ pedido         |       200000 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:06.491027-03 | 2026-11-03 09:54:22.408473-03 |                               |                  6 |       700140
+ producto       |        50000 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:06.238514-03 | 2026-11-03 09:54:22.351563-03 |                               |                  7 |       700140
+(5 filas)
+
+=== 4. CONSULTAS ACTIVAS (EXCLUYE IDLE) ===
+ pid | usuario | estado | espera_tipo | espera_evento | duracion | consulta 
+-----+---------+--------+-------------+---------------+----------+----------
+(0 filas)
+
+=== 5. BLOQUEOS: QUI├ëN BLOQUEA A QUI├ëN ===
+ pid | usename | state | duracion | pids_bloqueantes | consulta 
+-----+---------+-------+----------+------------------+----------
+(0 filas)
+
+=== 6. AUTOVACUUM EN CURSO ===
+=== 7. TRANSACCIONES LARGAS (> 5 MINUTOS) ===
+psql.exe : psql:C:/Users/enzon/OneDrive/Escritorio/TP3_BD/TP8/health_check.sql:101: ERROR:  column "max_dead_tuples" 
+does not exist
+En línea: 1 Carácter: 282
++ ... k_$ts.txt"; & "$pg\psql.exe" -h localhost -p 5545 -U postgres -d food ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (psql:C:/Users/e... does not exist:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+L═NEA 9:        max_dead_tuples,
+               ^
+ pid | usename | state | duracion_transaccion | consulta 
+-----+---------+-------+----------------------+----------
+(0 filas)
+
+=== 8. CONFIGURACI├ôN DE AUTOVACUUM ===
+              name               | setting | unit 
+---------------------------------+---------+------
+ autovacuum                      | on      | 
+ autovacuum_analyze_scale_factor | 0.1     | 
+ autovacuum_analyze_threshold    | 50      | 
+ autovacuum_max_workers          | 3       | 
+ autovacuum_naptime              | 60      | s
+ autovacuum_vacuum_scale_factor  | 0.2     | 
+ autovacuum_vacuum_threshold     | 50      | 
+(7 filas)
+

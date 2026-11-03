@@ -1,0 +1,7 @@
+﻿# backup=foodstore_20261103_095841.dump
+# timestamp=20261103_095841
+categoria|10
+cliente|20000
+detalle_pedido|700140
+pedido|200000
+producto|50000

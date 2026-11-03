@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe U6 — Food Store</title>
+<style>
+  @page { size: A4; margin: 11mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 9.1pt; color: #1a1a1a; line-height: 1.22; margin: 0; }
+  h1 { font-size: 14.5pt; margin: 0 0 1mm; color: #123a5c; }
+  .sub { color: #555; font-size: 8.6pt; margin-bottom: 3mm; }
+  h2 { font-size: 10.2pt; color: #123a5c; border-bottom: 1px solid #c9d6e2; padding-bottom: 0.6mm; margin: 3.2mm 0 1.2mm; }
+  table { width: 100%; border-collapse: collapse; margin: 0.6mm 0 2mm; font-size: 8.5pt; }
+  th, td { border: 1px solid #c9d6e2; padding: 0.7mm 1.6mm; text-align: left; vertical-align: top; }
+  th { background: #eaf1f7; }
+  td.num, th.num { text-align: right; }
+  td.ok { text-align: center; color: #1b7f3a; font-weight: 600; }
+  ul { margin: 0.5mm 0 2mm 4.5mm; padding: 0; }
+  li { margin-bottom: 0.5mm; }
+  p { margin: 0 0 1.5mm; }
+  code { font-family: Consolas, monospace; font-size: 8pt; background: #f2f5f8; padding: 0 1px; }
+  .note { background: #fff8e1; border-left: 3px solid #e0a800; padding: 1.2mm 2.5mm; margin: 1.2mm 0 2mm; font-size: 8.4pt; }
+  .kpi { display: flex; gap: 3mm; margin: 1mm 0 2mm; }
+  .kpi div { flex: 1; border: 1px solid #c9d6e2; border-radius: 1.5mm; padding: 1.2mm 2.5mm; background: #f7fafc; }
+  .kpi b { display: block; font-size: 12.5pt; color: #123a5c; }
+  .kpi span { font-size: 8pt; color: #555; }
+  .ev { font-size: 8pt; color: #333; }
+</style>
+</head>
+<body>
+
+<h1>Informe post-incidente — Simulacro de restauración (U6)</h1>
+<div class="sub"><b>Proyecto:</b> Food Store &nbsp;·&nbsp; <b>Motor:</b> PostgreSQL 17.11 &nbsp;·&nbsp; <b>Fecha:</b> 2026-11-03</div>
+<div class="sub" style="margin-bottom:3mm"><b>Integrantes:</b> Enzo Giaquinta &nbsp;·&nbsp; Agustin Contardi &nbsp;·&nbsp; Fernando Torrez &nbsp;·&nbsp; Ramiro Salcedo &nbsp;·&nbsp; Ignacio Sánchez</div>
+
+<h2>1. Respaldo utilizado</h2>
+<table>
+  <tr><th style="width:30%">Dato</th><th>Valor</th></tr>
+  <tr><td>Archivo</td><td><code>backups/foodstore_20261103_095841.dump</code></td></tr>
+  <tr><td>Fecha y hora</td><td>2026-11-03 09:58:44</td></tr>
+  <tr><td>Formato / tamaño</td><td>Custom (<code>pg_dump -Fc</code>) · 6,69 MB</td></tr>
+  <tr><td>Duración del respaldo</td><td>3,68 s</td></tr>
+</table>
+
+<h2>2. RPO y RTO</h2>
+<div class="kpi">
+  <div><b>4,92 s</b><span>RPO observado (antigüedad del respaldo)</span></div>
+  <div><b>5,23 s</b><span>RTO observado (restauración + validación)</span></div>
+</div>
+<table>
+  <tr><th style="width:18%">Métrica</th><th>Previsto (laboratorio)</th><th>Observado</th></tr>
+  <tr><td><b>RPO</b></td><td>≤ 24 h (respaldo diario)</td><td>4,92 s de antigüedad del respaldo al iniciar el simulacro</td></tr>
+  <tr><td><b>RTO</b></td><td>≤ 15 min</td><td>5,23 s (creación + <code>pg_restore</code> + validaciones)</td></tr>
+</table>
+<div class="note">El RPO observado mide la antigüedad del respaldo usado, no el intervalo de la política. El RPO de diseño es 24 h; el simulacro se ejecutó 4,92 s después de generar el respaldo, por eso el valor es bajo.</div>
+
+<h2>3. Resultado de las validaciones</h2>
+<table>
+  <tr><th>Tabla</th><th class="num">Esperado</th><th class="num">Restaurado</th><th style="width:7%">OK</th></tr>
+  <tr><td><code>categoria</code></td><td class="num">10</td><td class="num">10</td><td class="ok">✔</td></tr>
+  <tr><td><code>cliente</code></td><td class="num">20.000</td><td class="num">20.000</td><td class="ok">✔</td></tr>
+  <tr><td><code>producto</code></td><td class="num">50.000</td><td class="num">50.000</td><td class="ok">✔</td></tr>
+  <tr><td><code>pedido</code></td><td class="num">200.000</td><td class="num">200.000</td><td class="ok">✔</td></tr>
+  <tr><td><code>detalle_pedido</code></td><td class="num">700.140</td><td class="num">700.140</td><td class="ok">✔</td></tr>
+</table>
+<ul>
+  <li><code>productos_invalidos = 0</code> (precio o stock negativos); <code>detalles_invalidos = 0</code> (cantidad ≤ 0 o precio unitario &lt; 0).</li>
+  <li>Tamaño restaurado: 98 MB (origen: 103 MB). Diferencia física por reorganización del clúster; el contenido lógico es idéntico según los conteos.</li>
+</ul>
+
+<h2>4. Problema real encontrado</h2>
+<p><code>dropdb --if-exists</code> emite un <code>NOTICE</code> por stderr cuando la base no existe. Con <code>$ErrorActionPreference = 'Stop'</code>, PowerShell 5.1 interpretó ese <code>NOTICE</code> como error terminante y abortó el primer simulacro. Se corrigió encapsulando las llamadas nativas en <code>Invoke-Native</code>, que baja temporalmente la preferencia y evalúa el código de salida real. Se reejecutó y terminó OK.</p>
+<p>También se detectó que la consigna usa <code>precio</code> y <code>precio_unitario</code>, mientras el esquema real define <code>precio_lista</code> y <code>precio_unitario_facturado</code>. Las validaciones se adaptaron al esquema real y se dejó constancia; no se inventaron resultados.</p>
+
+<h2>5. Mejora concreta</h2>
+<p>Programar el respaldo diario con el Programador de tareas y alertar si no hay un <code>FIN OK</code> en 24 h. Para bases mayores, restaurar con <code>pg_restore -j 4</code> (paralelo), agregar retención (7 diarios + 4 semanales) y verificar el dump con <code>pg_restore --list</code>. Automatizar el simulacro semanal y publicar RTO/RPO en un tablero.</p>
+
+<h2>6. Uso de OpenCode y verificación</h2>
+<p>La especificación y los scripts se generaron/ajustaron con asistencia de IA. Se verificó la sintaxis con el parser de PowerShell, se ejecutaron realmente el respaldo, el chequeo de salud, el mantenimiento y la restauración, y se compararon los conteos contra la línea base registrada al respaldar. El bug del <code>NOTICE</code> se detectó en la primera ejecución real, se corrigió y se reejecutó con éxito. No se incluyó ninguna contraseña.</p>
+
+<h2>7. Evidencias</h2>
+<p class="ev"><code>logs/backup_20261103_095841.log</code> · <code>logs/baseline_20261103_095841.txt</code> · <code>evidencias/health_check_20261103_095718.txt</code> · <code>evidencias/maintenance_20261103_095723.txt</code> · <code>logs/restore_test_20261103_095849.log</code> · <code>evidencias/restore_test_20261103_095849.txt</code></p>
+
+</body>
+</html>

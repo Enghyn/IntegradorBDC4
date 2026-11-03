@@ -1,0 +1,7 @@
+﻿[2026-11-03 09:56:56] [INFO] INICIO respaldo db=foodstore host=localhost port=5545 user=postgres
+[2026-11-03 09:56:56] [INFO] Archivo destino: C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\backups\foodstore_20261103_095656.dump
+[2026-11-03 09:56:56] [INFO] Binarios: C:\Program Files\PostgreSQL\17\bin
+[2026-11-03 09:56:56] [INFO] Ejecutando pg_dump -Fc ...
+[2026-11-03 09:56:59] [INFO] Respaldo OK: foodstore_20261103_095656.dump (6.69 MB)
+[2026-11-03 09:56:59] [INFO] LÃ­nea base de conteos: C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\logs\baseline_20261103_095656.txt
+[2026-11-03 09:56:59] [INFO] FIN OK duracion=3.72s tamano=6.69MB codigo=0

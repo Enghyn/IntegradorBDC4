@@ -1,0 +1,9 @@
+﻿[2026-11-03 09:57:28] [INFO] INICIO simulacro restauracion
+[2026-11-03 09:57:28] [INFO] Respaldo usado : C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\backups\foodstore_20261103_095656.dump
+[2026-11-03 09:57:28] [INFO] Fecha respaldo : 2026-11-03 09:56:59
+[2026-11-03 09:57:28] [INFO] Tamano respaldo: 6.69 MB
+[2026-11-03 09:57:28] [INFO] Linea base     : C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\logs\baseline_20261103_095656.txt
+[2026-11-03 09:57:28] [INFO] Base destino   : foodstore_restore_test
+[2026-11-03 09:57:28] [INFO] RPO observado  : 00h 00m 28.916s (28,92 s de antiguedad)
+[2026-11-03 09:57:28] [INFO] Preparacion: eliminando foodstore_restore_test si existe...
+[2026-11-03 09:57:28] [ERROR] FIN ERROR: NOTICE:  database "foodstore_restore_test" does not exist, skipping

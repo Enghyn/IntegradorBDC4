@@ -1,0 +1,51 @@
+﻿=== 1. CONFIGURACI├ôN VIGENTE DE AUTOVACUUM ===
+              name               | setting | unit 
+---------------------------------+---------+------
+ autovacuum                      | on      | 
+ autovacuum_analyze_scale_factor | 0.1     | 
+ autovacuum_analyze_threshold    | 50      | 
+ autovacuum_max_workers          | 3       | 
+ autovacuum_naptime              | 60      | s
+ autovacuum_vacuum_scale_factor  | 0.2     | 
+ autovacuum_vacuum_threshold     | 50      | 
+(7 filas)
+
+=== 2. ESTADO DE LAS TABLAS (OBSERVACI├ôN PREVIA) ===
+     tabla      | tuplas_vivas | tuplas_muertas | pct_muertas | cambios_sin_analyze | ultimo_vacuum |       ultimo_autovacuum       |        ultimo_analyze         |      ultimo_autoanalyze       
+----------------+--------------+----------------+-------------+---------------------+---------------+-------------------------------+-------------------------------+-------------------------------
+ categoria      |           10 |              0 |        0.00 |                  10 |               |                               |                               | 
+ cliente        |        20000 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:06.269639-03 | 2026-11-03 09:54:22.263662-03 | 
+ detalle_pedido |       700140 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:07.286384-03 | 2026-11-03 09:54:22.5205-03   | 2026-11-03 09:55:07.745962-03
+ pedido         |       200000 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:06.491027-03 | 2026-11-03 09:54:22.408473-03 | 
+ producto       |        50000 |              0 |        0.00 |                   0 |               | 2026-11-03 09:55:06.238514-03 | 2026-11-03 09:54:22.351563-03 | 
+(5 filas)
+
+=== 3. SEM├üFORO: TABLAS QUE REQUIEREN ATENCI├ôN ===
+     tabla      |         diagnostico         
+----------------+-----------------------------
+ categoria      | SIN ESTADISTICAS -> ANALYZE
+ cliente        | OK
+ detalle_pedido | OK
+ pedido         | OK
+ producto       | OK
+(5 filas)
+
+ANALYZE
+=== 5. VERIFICACI├ôN POST-ACCI├ôN ===
+     tabla      | tuplas_vivas | tuplas_muertas | cambios_sin_analyze |        ultimo_analyze         |      ultimo_autoanalyze       
+----------------+--------------+----------------+---------------------+-------------------------------+-------------------------------
+ categoria      |           10 |              0 |                   0 | 2026-11-03 09:57:23.759041-03 | 
+ cliente        |        20000 |              0 |                   0 | 2026-11-03 09:54:22.263662-03 | 
+ detalle_pedido |       700140 |              0 |                   0 | 2026-11-03 09:54:22.5205-03   | 2026-11-03 09:55:07.745962-03
+ pedido         |       200000 |              0 |                   0 | 2026-11-03 09:54:22.408473-03 | 
+ producto       |        50000 |              0 |                   0 | 2026-11-03 09:54:22.351563-03 | 
+(5 filas)
+
+=== 6. ESTAD├ìSTICAS DE LA TABLA INTERVENIDA ===
+   columna    | valores_distintos | fraccion_nulos | valores_frecuentes 
+--------------+-------------------+----------------+--------------------
+ activo       |                 1 |              0 | {t}
+ id_categoria |                -1 |              0 | 
+ nombre       |                -1 |              0 | 
+(3 filas)
+

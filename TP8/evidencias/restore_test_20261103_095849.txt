@@ -1,0 +1,19 @@
+﻿SIMULACRO DE RESTAURACION - FOOD STORE
+Fecha de ejecucion : 2026-11-03 09:58:56
+Respaldo usado     : foodstore_20261103_095841.dump
+Fecha del respaldo : 2026-11-03 09:58:44
+Tamano del respaldo: 6.69 MB
+Base restaurada    : foodstore_restore_test (98 MB)
+RPO observado      : 4.92 s
+RTO observado      : 5.23 s
+
+TABLA|ESPERADO|RESTAURADO|OK
+categoria|10|10|True
+cliente|20000|20000|True
+detalle_pedido|700140|700140|True
+pedido|200000|200000|True
+producto|50000|50000|True
+
+productos_invalidos=0
+detalles_invalidos=0
+resultado=OK

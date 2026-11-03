@@ -1,0 +1,25 @@
+﻿[2026-11-03 09:58:49] [INFO] INICIO simulacro restauracion
+[2026-11-03 09:58:49] [INFO] Respaldo usado : C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\backups\foodstore_20261103_095841.dump
+[2026-11-03 09:58:49] [INFO] Fecha respaldo : 2026-11-03 09:58:44
+[2026-11-03 09:58:49] [INFO] Tamano respaldo: 6.69 MB
+[2026-11-03 09:58:49] [INFO] Linea base     : C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\logs\baseline_20261103_095841.txt
+[2026-11-03 09:58:49] [INFO] Base destino   : foodstore_restore_test
+[2026-11-03 09:58:49] [INFO] RPO observado  : 00h 00m 04.922s (4,92 s de antiguedad)
+[2026-11-03 09:58:49] [INFO] Preparacion: eliminando foodstore_restore_test si existe...
+[2026-11-03 09:58:50] [INFO] dropdb: NOTICE:  database "foodstore_restore_test" does not exist, skipping
+[2026-11-03 09:58:50] [INFO] CRONOMETRO INICIADO (RTO)
+[2026-11-03 09:58:50] [INFO] Creando base foodstore_restore_test ...
+[2026-11-03 09:58:50] [INFO] Restaurando foodstore_20261103_095841.dump con pg_restore ...
+[2026-11-03 09:58:54] [INFO] Validando conteos de filas...
+[2026-11-03 09:58:54] [INFO] Conteo categoria: esperado=10 restaurado=10 OK
+[2026-11-03 09:58:54] [INFO] Conteo cliente: esperado=20000 restaurado=20000 OK
+[2026-11-03 09:58:54] [INFO] Conteo detalle_pedido: esperado=700140 restaurado=700140 OK
+[2026-11-03 09:58:54] [INFO] Conteo pedido: esperado=200000 restaurado=200000 OK
+[2026-11-03 09:58:54] [INFO] Conteo producto: esperado=50000 restaurado=50000 OK
+[2026-11-03 09:58:54] [INFO] Validando restricciones logicas...
+[2026-11-03 09:58:55] [INFO] productos_invalidos=0 (esperado 0)
+[2026-11-03 09:58:55] [INFO] detalles_invalidos=0 (esperado 0)
+[2026-11-03 09:58:56] [INFO] CRONOMETRO DETENIDO: RTO = 00h 00m 05.227s (5,23 s)
+[2026-11-03 09:58:56] [INFO] Tamano base restaurada: 98 MB
+[2026-11-03 09:58:56] [INFO] Evidencia: C:\Users\enzon\OneDrive\Escritorio\TP3_BD\TP8\evidencias\restore_test_20261103_095849.txt
+[2026-11-03 09:58:56] [INFO] FIN OK: restauracion y validaciones correctas.
