@@ -88,6 +88,9 @@ WHERE a.datname = current_database()
   AND cardinality(pg_blocking_pids(a.pid)) > 0;
 
 \echo '=== 6. AUTOVACUUM EN CURSO ==='
+-- Version-safe (PostgreSQL 16 y 17+): no se consulta max_dead_tuples, que fue
+-- reemplazada en PG 17 por max_dead_tuple_bytes. Se listan solo columnas
+-- presentes en ambas versiones y los parámetros vigentes se leen de pg_settings.
 SELECT pid,
        datname,
        relid::regclass                                AS tabla,
@@ -96,9 +99,20 @@ SELECT pid,
        heap_blks_scanned,
        heap_blks_vacuumed,
        index_vacuum_count,
-       max_dead_tuples,
        num_dead_tuples
 FROM pg_stat_progress_vacuum;
+
+\echo '=== 6.b PARÁMETROS DE AUTOVACUUM VIGENTES (pg_settings) ==='
+SELECT name, setting, unit
+FROM pg_settings
+WHERE name IN ('autovacuum',
+               'autovacuum_naptime',
+               'autovacuum_max_workers',
+               'autovacuum_vacuum_threshold',
+               'autovacuum_vacuum_scale_factor',
+               'autovacuum_vacuum_insert_threshold',
+               'autovacuum_vacuum_insert_scale_factor')
+ORDER BY name;
 
 \echo '=== 7. TRANSACCIONES LARGAS (> 5 MINUTOS) ==='
 SELECT pid,
